@@ -25,7 +25,7 @@ function flakeTexture(size = 512) {
 const FLAKE = flakeTexture();
 
 export const PAINTS = [
-  { id: 'rosso', name: 'Rosso Candy', color: '#a8060f', metalness: 0.6, roughness: 0.3, flake: 0.5, sheen: 0.6, sheenColor: '#ff0a1a', spec: '#ff6070' },
+  { id: 'rosso', name: 'Rosso Candy', color: '#8a0410', metalness: 0.9, roughness: 0.35, flake: 0.5 },
   { id: 'silver', name: 'Liquid Silver', color: '#b9bcbf', metalness: 0.9, roughness: 0.28, flake: 0.45 },
   { id: 'midnight', name: 'Midnight Blue', color: '#0a1a3a', metalness: 0.7, roughness: 0.3, flake: 0.6 },
   { id: 'pearl', name: 'Pearl White', color: '#e8e6e0', metalness: 0.1, roughness: 0.35, flake: 0.2, iridescence: 0.35 },

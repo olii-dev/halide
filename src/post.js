@@ -127,11 +127,12 @@ export class Post {
     // bloom: 6-level downsample / tent upsample chain on the linear HDR image
     let src = this.rtDof.texture, sw = this.w, sh = this.h;
     this.quad.material = this.down;
-    for (const m of this.mips) { this.down.uniforms.tMap.value = src; this.down.uniforms.px.value.set(0.5 / sw, 0.5 / sh); r.setRenderTarget(m.d); this.quad.render(r); src = m.d.texture; sw = m.w; sh = m.h; }
+    const mips = opts.bloomOff ? [] : this.mips;
+    for (const m of mips) { this.down.uniforms.tMap.value = src; this.down.uniforms.px.value.set(0.5 / sw, 0.5 / sh); r.setRenderTarget(m.d); this.quad.render(r); src = m.d.texture; sw = m.w; sh = m.h; }
     this.quad.material = this.up; let prev = this.black;
-    for (let i = this.mips.length - 1; i >= 0; i--) { const m = this.mips[i]; this.up.uniforms.tMap.value = m.d.texture; this.up.uniforms.tPrev.value = prev;
+    for (let i = mips.length - 1; i >= 0; i--) { const m = mips[i]; this.up.uniforms.tMap.value = m.d.texture; this.up.uniforms.tPrev.value = prev;
       this.up.uniforms.px.value.set(1 / m.w, 1 / m.h); r.setRenderTarget(m.u); this.quad.render(r); prev = m.u.texture; }
-    const f = this.final.uniforms; f.tBloom.value = prev;
+    const f = this.final.uniforms; f.tBloom.value = prev; f.bloom.value = opts.bloomOff ? 0 : 0.045;
     f.tColor.value = this.rtDof.texture; f.exposure.value = Math.pow(2, opts.ev); f.grain.value = opts.grain;
     f.vignette.value = opts.vignette; f.time.value = opts.animateGrain ? (performance.now() % 1000) : 0;
     this.quad.material = this.final; r.setRenderTarget(target); this.quad.render(r);
