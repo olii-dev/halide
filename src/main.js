@@ -27,7 +27,7 @@ camera.setFocalLength(state.focal);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 const sun = new THREE.DirectionalLight(0xffffff, 1);
-sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.radius = 6; sun.shadow.blurSamples = 16;
+sun.castShadow = true; sun.shadow.mapSize.setScalar(q.get("sm") ? +q.get("sm") : 4096); sun.shadow.radius = 6; sun.shadow.blurSamples = 16;
 sun.shadow.bias = -0.0002; sun.shadow.normalBias = 0.02;
 scene.add(sun, sun.target);
 const ground = new Ground(renderer, scene);
