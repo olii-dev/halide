@@ -22,10 +22,10 @@ body.used #hint { opacity: 0; }
 .chip.on { color: var(--ink); background: rgba(243,239,230,.1); }
 .swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; padding: 0; box-shadow: inset 0 -4px 6px rgba(0,0,0,.35), inset 0 3px 4px rgba(255,255,255,.25); }
 .swatch.on { border-color: var(--ink); }
-.dial { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 74px; }
+.dial { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 68px; }
 .dial label { font-size: 9px; letter-spacing: .18em; color: var(--dim); }
 .dial output { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
-.dial input { width: 70px; accent-color: var(--amber); height: 14px; }
+.dial input { width: 64px; accent-color: var(--amber); height: 14px; }
 #shutter { width: 52px; height: 52px; border-radius: 50%; border: 2px solid var(--ink); background: transparent; display: grid; place-items: center; flex: none; margin-left: 4px; }
 #shutter span { width: 40px; height: 40px; border-radius: 50%; background: var(--ink); transition: transform .12s; }
 #shutter:active span { transform: scale(.88); }
@@ -51,4 +51,8 @@ body.shooting #dock, body.shooting #top, body.shooting #hint { opacity: 0; }
   #paints { order: 2; } #dials { order: 3; width: 100%; justify-content: space-around; } #shutter { order: 2; }
   .dial { width: 64px; } .dial input { width: 60px; }
   #hint { display: none; }
+}
+@media (min-width: 821px) and (max-width: 1360px) {
+  #dock { flex-wrap: wrap; justify-content: center; row-gap: 6px; }
+  #dials { border-left: 0; }
 }

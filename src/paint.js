@@ -25,7 +25,7 @@ function flakeTexture(size = 512) {
 const FLAKE = flakeTexture();
 
 export const PAINTS = [
-  { id: 'rosso', name: 'Rosso Candy', color: '#7a0308', metalness: 0.55, roughness: 0.32, flake: 0.5 },
+  { id: 'rosso', name: 'Rosso Candy', color: '#a8060f', metalness: 0.6, roughness: 0.3, flake: 0.5, sheen: 0.6, sheenColor: '#ff0a1a', spec: '#ff6070' },
   { id: 'silver', name: 'Liquid Silver', color: '#b9bcbf', metalness: 0.9, roughness: 0.28, flake: 0.45 },
   { id: 'midnight', name: 'Midnight Blue', color: '#0a1a3a', metalness: 0.7, roughness: 0.3, flake: 0.6 },
   { id: 'pearl', name: 'Pearl White', color: '#e8e6e0', metalness: 0.1, roughness: 0.35, flake: 0.2, iridescence: 0.35 },
@@ -41,10 +41,12 @@ export function makePaint(p, template) {
     clearcoat: 1, clearcoatRoughness: p.clearRough ?? 0.03,
     normalMap: p.flake > 0 ? FLAKE : null, normalScale: new THREE.Vector2(p.flake, p.flake),
     iridescence: p.iridescence ?? 0, iridescenceIOR: 1.3, iridescenceThicknessRange: [250, 600],
+    sheen: p.sheen ?? 0, sheenColor: new THREE.Color(p.sheenColor ?? '#000000'), sheenRoughness: 0.35,
+    specularColor: new THREE.Color(p.spec ?? '#ffffff'),
     envMapIntensity: 1, side: THREE.DoubleSide,
   });
   if (m.normalMap) { m.normalMap = FLAKE.clone(); m.normalMap.repeat.set(24, 24); m.normalMap.needsUpdate = true; }
-  if (template?.aoMap) { m.aoMap = template.aoMap; m.aoMapIntensity = 1; }
+  if (template?.aoMap) { m.aoMap = template.aoMap; m.aoMapIntensity = template.aoMapIntensity ?? 1; }
   return m;
 }
 

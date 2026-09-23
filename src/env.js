@@ -42,7 +42,7 @@ export function analyse(tex) {
   const dOmegaBase = (2 * Math.PI / W) * (Math.PI / H);
   const sunE = new THREE.Vector3();          // sun irradiance (normal incidence), rgb
   const skyE = new THREE.Vector3();          // sky irradiance on horizontal ground, rgb (sun removed)
-  const clipped = new Float32Array(data);    // env copy with the sun painted out
+  const clipped = new Float32Array(data); let gL = 0, gN = 0;    // env copy with the sun painted out
   const cosSunCut = Math.cos(THREE.MathUtils.degToRad(4));
   const thresh = Math.max(20 * median, maxL * 0.02);
   // ring colour just outside the sun, used to fill the hole
@@ -66,6 +66,7 @@ export function analyse(tex) {
         r = ring.x; g = ring.y; b = ring.z;
         clipped[i] = r; clipped[i + 1] = g; clipped[i + 2] = b;
       }
+      if (d.y < -0.35 && d.y > -0.8) { gL += lum(i); gN++; }
       if (d.y > 0) { skyE.x += r * d.y * dOmega; skyE.y += g * d.y * dOmega; skyE.z += b * d.y * dOmega; }
     }
   }
@@ -81,7 +82,7 @@ export function analyse(tex) {
   return {
     hasSun, sunDir, envTex,
     sunColor: sunLum > 0 ? sunE.clone().multiplyScalar(1 / sunLum) : new THREE.Vector3(1, 1, 1),
-    sunIntensity: sunLum,
+    sunIntensity: sunLum, skyLum, groundL: gL / Math.max(gN, 1),
     skyIrradiance: skyLum,
     sunShare: hasSun ? sunOnGround / (sunOnGround + skyLum) : 0,
     peak: maxL, median,

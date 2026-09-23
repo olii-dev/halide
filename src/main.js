@@ -23,7 +23,7 @@ const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 20
 camera.filmGauge = 36;
 
 export const state = {
-  focal: +(q.get('f') ?? 50), fstop: +(q.get('n') ?? 2.8), ev: +(q.get('ev') ?? 0), grain: +(q.get('grain') ?? 0.3),
+  focal: +(q.get('f') ?? 50), fstop: +(q.get('n') ?? 2.8), ev: +(q.get('ev') ?? 0), grain: +(q.get('grain') ?? 0.3), speed: +(q.get('kmh') ?? 0), previewSamples: +(q.get('ps') ?? 6),
   vignette: 0.3, focus: 8, dof: q.get('dof') !== '0', loc: q.get('loc') ?? LOCATIONS[0].id, paint: q.get('paint') ?? 'rosso',
 };
 camera.setFocalLength(state.focal);
@@ -58,7 +58,8 @@ export async function setLocation(id, { keepCar = false } = {}) {
   sun.intensity = info.sunIntensity; sunDir.copy(info.sunDir);
   ground.sunShare = info.sunShare;
   if (!keepCar) { rig.carBearing = bearingFromU(L.u); rig.carYaw = rig.carBearing + THREE.MathUtils.degToRad(25); frame(); }
-  window.__env = { id: L.id, hasSun: info.hasSun, sunShare: +info.sunShare.toFixed(3), sunDir: info.sunDir.toArray().map(v => +v.toFixed(3)) };
+  window.__env = { id: L.id, hasSun: info.hasSun, sunShare: +info.sunShare.toFixed(3), sunDir: info.sunDir.toArray().map(v => +v.toFixed(3)), sunI: +info.sunIntensity.toFixed(1), skyE: +info.skyLum.toFixed(1), groundL: +info.groundL.toFixed(3),
+    impliedAlbedo: +(Math.PI * info.groundL / (info.sunIntensity * Math.max(info.sunDir.y, 0) + info.skyLum)).toFixed(3) };
   console.log('env', JSON.stringify(window.__env));
   window.__hi = false;
   // sharp backdrop: 8k LDR photo (4k on small GPUs / phones), HDR still lights the car
@@ -92,6 +93,9 @@ async function loadCar() {
     const n = o.material.name || '';
     if (/^Paint 1/.test(n)) paintSlots.push({ mesh: o, original: o.material });
     if (n === 'License') { o.material = o.material.clone(); o.material.map = plate; o.material.needsUpdate = true; }
+    // rubber: the source file has glossy sidewalls (0.4) that mirror warm skies as tan
+    if (n === 'Tireside') { o.material = o.material.clone(); o.material.roughness = 0.82; o.material.envMapIntensity = 0.75; }
+    if (n === 'Tiretread') { o.material = o.material.clone(); o.material.roughness = 0.9; o.material.envMapIntensity = 0.7; }
     if (/^Paint 2/.test(n)) { o.material = o.material.clone(); o.material.normalMap = null; o.material.clearcoat = 0.6; o.material.clearcoatRoughness = 0.08; o.material.roughness = 0.45; }
   });
   carHolder.add(car);
@@ -100,7 +104,34 @@ async function loadCar() {
   if (q.has('nosun')) sun.intensity = 0;
   setPaint(state.paint);
   ground.bake(car);
+  buildWheels();
 }
+
+// Spinning wheel parts (rim, tyre, disc) get a pivot at the hub so they can
+// rotate about the axle; calipers stay put.
+let wheels = [];
+function buildWheels() {
+  wheels = []; car.updateMatrixWorld(true);
+  const axleW = new THREE.Vector3(1, 0, 0).transformDirection(car.matrixWorld);
+  car.traverse(o => {
+    if (!/^Wheel(Front|Rear)[LR]$/.test(o.name)) return;
+    const spin = o.children.filter(c => !/BrakePad/.test(c.name));
+    const bb = new THREE.Box3(); spin.forEach(c => bb.union(new THREE.Box3().setFromObject(c, true)));
+    const cW = bb.getCenter(new THREE.Vector3()), radius = (bb.max.y - bb.min.y) / 2;
+    const inv = new THREE.Matrix4().copy(o.matrixWorld).invert();
+    const pivot = new THREE.Group(); pivot.position.copy(cW).applyMatrix4(inv); o.add(pivot); pivot.updateMatrixWorld(true);
+    spin.forEach(c => pivot.attach(c));
+    const axis = axleW.clone().transformDirection(inv).normalize();
+    wheels.push({ pivot, axis, radius, base: pivot.quaternion.clone() });
+  });
+}
+const _q = new THREE.Quaternion();
+function spinWheels(t) {
+  // t in [-0.5, 0.5] of the shutter; angle = v / r * shutter * t (rolling forward)
+  const v = state.speed / 3.6, sh = 1 / 60;
+  for (const w of wheels) { _q.setFromAxisAngle(w.axis, v / w.radius * sh * t); w.pivot.quaternion.copy(w.base).multiply(_q); }
+}
+const subframe = t => spinWheels(t);
 
 function frame() {
   const vfov = 2 * Math.atan(camera.getFilmHeight() / 2 / camera.getFocalLength());
@@ -141,7 +172,7 @@ export async function exportPhoto(longEdge = 3840) {
   const out = new THREE.WebGLRenderTarget(w, h);
   const [pw, ph] = [post.w, post.h];
   post.setSize(w, h); applyRig();
-  post.render(scene, camera, { ...state, quality: 'export', animateGrain: false }, out);
+  post.render(scene, camera, { ...state, quality: 'export', animateGrain: false, subframe: state.speed > 0 ? subframe : null }, out);
   const px = new Uint8Array(w * h * 4); renderer.readRenderTargetPixels(out, 0, 0, w, h, px);
   out.dispose(); post.setSize(pw, ph);
   const c = document.createElement('canvas'); c.width = w; c.height = h;
@@ -184,7 +215,7 @@ let ui = null;
 await Promise.all([setLocation(state.loc), loadCar()]);
 resize(); frame();
 ui = buildUI({ state, rig, setLocation, setPaint, setFocal, exportPhoto, LOCATIONS, PAINTS });
-function loop() { applyRig(); post.render(scene, camera, { ...state, animateGrain: true }); requestAnimationFrame(loop); }
+function loop() { applyRig(); post.render(scene, camera, { ...state, animateGrain: true, subframe: state.speed > 0 ? subframe : null }); requestAnimationFrame(loop); }
 loop();
 document.body.classList.add('ready');
 window.halide = { state, rig, exportPhoto, setLocation, setPaint, setFocal, car, carHolder, THREE, camera };

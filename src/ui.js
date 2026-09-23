@@ -20,6 +20,7 @@ export function buildUI({ state, rig, setLocation, setPaint, setFocal, exportPho
       set: v => { state.fstop = FSTOPS[v]; }, fmt: () => `f/${state.fstop}` },
     { key: 'ev', label: 'EXPOSURE', min: -3, max: 3, step: 0.1, get: () => state.ev, set: v => { state.ev = v; }, fmt: () => `${state.ev >= 0 ? '+' : ''}${state.ev.toFixed(1)}` },
     { key: 'h', label: 'HEIGHT', min: 0.25, max: 1.7, step: 0.01, get: () => rig.camH, set: v => { rig.camH = v; }, fmt: () => `${rig.camH.toFixed(2)}m` },
+    { key: 'speed', label: 'WHEELS', min: 0, max: 200, step: 5, get: () => state.speed, set: v => { state.speed = v; }, fmt: () => state.speed ? `${state.speed} km/h` : 'still' },
     { key: 'grain', label: 'GRAIN', min: 0, max: 1, step: 0.01, get: () => state.grain, set: v => { state.grain = v; }, fmt: () => `${Math.round(state.grain * 100)}` },
   ];
   const inputs = [];

@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer-core';
 const [url, out, w = 1600, h = 900] = process.argv.slice(2);
-const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new',
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 600000,
   args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage();
 p.on('console', m => console.log('page:', m.text()));

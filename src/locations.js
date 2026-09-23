@@ -7,6 +7,6 @@ export const LOCATIONS = [
   { id: 'wide_street_01', name: 'Boulevard', place: 'Wide street, midday', height: 1.7, u: 0.39 },
   { id: 'modern_evening_street', name: 'Glass District', place: 'City street, evening', height: 1.7, u: 0.62 },
   { id: 'cobblestone_street_night', name: 'Old Town', place: 'Cobblestones, night', height: 1.7, u: 0.46 },
-  { id: 'aarfontein_dawn_2', name: 'Karoo', place: 'Scrubland, dawn', height: 1.7, u: 0.55 },
+  { id: 'mealie_road', name: 'Mealie Road', place: 'Farm road, golden hour', height: 1.7, u: 0.62 },
 ];
 export function bearingFromU(u) { const t = (u - 0.5) * 2 * Math.PI; return Math.atan2(-Math.cos(t), -Math.sin(t)); }

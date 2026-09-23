@@ -78,6 +78,9 @@ export class Post {
     this.down = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: downFS, uniforms: { tMap: { value: null }, px: { value: new THREE.Vector2() } } });
     this.up = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: upFS, uniforms: { tMap: { value: null }, tPrev: { value: null }, px: { value: new THREE.Vector2() } } });
     this.black = new THREE.DataTexture(new Uint8Array(4), 1, 1); this.black.needsUpdate = true;
+    this.copy = new THREE.ShaderMaterial({ vertexShader: vs, uniforms: { tMap: { value: null }, w: { value: 1 } },
+      fragmentShader: `uniform sampler2D tMap; uniform float w; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(tMap, vUv).rgb * w, 1.); }`,
+      blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true });
     this.quad = new FullScreenQuad(this.dof);
     this.setSize(1, 1);
   }
@@ -87,6 +90,7 @@ export class Post {
     this.rtScene = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4,
       depthTexture: new THREE.DepthTexture(w, h, THREE.FloatType) });
     this.rtDof = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
+    this.rtAccum?.dispose(); this.rtAccum = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
     this.mips?.forEach(m => { m.d.dispose(); m.u.dispose(); }); this.mips = [];
     let mw = w, mh = h; for (let i = 0; i < 6; i++) { mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
       this.mips.push({ d: new THREE.WebGLRenderTarget(mw, mh, { type: THREE.HalfFloatType }), u: new THREE.WebGLRenderTarget(mw, mh, { type: THREE.HalfFloatType }), w: mw, h: mh }); }
@@ -94,8 +98,25 @@ export class Post {
   }
   render(scene, camera, opts, target = null) {
     const r = this.renderer, u = this.dof.uniforms;
-    r.setRenderTarget(this.rtScene); r.render(scene, camera);
-    u.tColor.value = this.rtScene.texture; u.tDepth.value = this.rtScene.depthTexture;
+    // wheel motion blur: average several sub-frames across the shutter (wheel angles only)
+    const K = opts.subframe ? (opts.quality === 'export' ? 24 : (opts.previewSamples ?? 6)) : 1;
+    if (K > 1) {
+      const pc = new THREE.Color(), pa = r.getClearAlpha(); r.getClearColor(pc);
+      r.setRenderTarget(this.rtAccum); r.setClearColor(0x000000, 1); r.clear(); r.setClearColor(pc, pa);
+      this.quad.material = this.copy; this.copy.uniforms.w.value = 1 / K;
+      for (let i = 0; i < K; i++) {
+        opts.subframe((i + 0.5) / K - 0.5);
+        r.setRenderTarget(this.rtScene); r.render(scene, camera);
+        this.copy.uniforms.tMap.value = this.rtScene.texture; r.setRenderTarget(this.rtAccum);
+        const ac = r.autoClear; r.autoClear = false; this.quad.render(r); r.autoClear = ac;
+      }
+      opts.subframe(0);
+      u.tColor.value = this.rtAccum.texture;
+    } else {
+      r.setRenderTarget(this.rtScene); r.render(scene, camera);
+      u.tColor.value = this.rtScene.texture;
+    }
+    u.tDepth.value = this.rtScene.depthTexture;
     u.near.value = camera.near; u.far.value = camera.far;
     u.focus.value = opts.focus; u.focal.value = camera.getFocalLength(); u.fstop.value = opts.fstop;
     u.sensorH.value = camera.getFilmHeight();
