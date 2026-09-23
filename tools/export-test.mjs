@@ -1,0 +1,11 @@
+import puppeteer from 'puppeteer-core'; import fs from 'fs';
+const [url, out, edge = 1920] = process.argv.slice(2);
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage(); p.on('pageerror', e => console.log('ERR', e.message)); p.on('console', m => /rror/.test(m.text()) && console.log(m.text()));
+await p.setViewport({ width: 1280, height: 720 });
+await p.goto(url, { timeout: 120000 }); await p.waitForFunction('window.__ready', { timeout: 150000 });
+const t0 = Date.now();
+const b64 = await p.evaluate(async (edge) => { const { blob, w, h } = await window.halide.exportPhoto(+edge);
+  const buf = new Uint8Array(await blob.arrayBuffer()); let s = ''; for (let i = 0; i < buf.length; i += 32768) s += String.fromCharCode(...buf.subarray(i, i + 32768)); return JSON.stringify({ w, h, d: btoa(s) }); }, edge);
+const r = JSON.parse(b64); fs.writeFileSync(out, Buffer.from(r.d, 'base64')); console.log('export', r.w, r.h, 'ms', Date.now() - t0);
+await b.close();

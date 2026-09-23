@@ -38,6 +38,7 @@ const sunDir = new THREE.Vector3(0, 1, 0);
 const ground = new Ground(renderer, scene);
 const post = new Post(renderer);
 const carHolder = new THREE.Group(); scene.add(carHolder);
+const backdropMeta = fetch(`${BASE}assets/backdrop/backdrops.json`).then(r => r.json()).catch(() => ({}));
 let sky = null, car = null, carRadius = 3, paintSlots = [];
 
 export async function setLocation(id, { keepCar = false } = {}) {
@@ -60,8 +61,12 @@ export async function setLocation(id, { keepCar = false } = {}) {
   window.__env = { id: L.id, hasSun: info.hasSun, sunShare: +info.sunShare.toFixed(3), sunDir: info.sunDir.toArray().map(v => +v.toFixed(3)) };
   console.log('env', JSON.stringify(window.__env));
   window.__hi = false;
-  if (!q.has('lo')) loadHDR(`${BASE}assets/hdri/${L.id}_4k.hdr`).then(hi => {
-    if (sky && state.loc === L.id) { const old = sky.material.map; sky.material.map = hi; sky.material.needsUpdate = true; old.dispose(); window.__hi = true; } else hi.dispose();
+  // sharp backdrop: 8k LDR photo (4k on small GPUs / phones), HDR still lights the car
+  const big = renderer.capabilities.maxTextureSize >= 8192 && !matchMedia('(max-width: 820px)').matches;
+  if (!q.has('lo')) Promise.all([backdropMeta, new THREE.TextureLoader().loadAsync(`${BASE}assets/backdrop/${L.id}_${big ? '8k' : '4k'}.jpg`)]).then(([meta, tex]) => {
+    if (!(sky && state.loc === L.id)) { tex.dispose(); return; }
+    tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); tex.generateMipmaps = true;
+    const old = sky.material.map; sky.material.map = tex; sky.material.color.setScalar(meta[L.id]?.white ?? 1); sky.material.needsUpdate = true; old.dispose(); window.__hi = true;
   });
 }
 
@@ -99,7 +104,7 @@ async function loadCar() {
 
 function frame() {
   const vfov = 2 * Math.atan(camera.getFilmHeight() / 2 / camera.getFocalLength());
-  rig.carDist = +(q.get('dist') ?? (carRadius * 1.3 / Math.tan(vfov / 2)));
+  rig.carDist = +(q.get('dist') ?? (carRadius * 0.95 / Math.tan(vfov / 2)));
   if (q.has('bearing')) rig.carBearing = +q.get('bearing') * Math.PI / 180;
   if (q.has('yaw')) rig.carYaw = rig.carBearing + +q.get('yaw') * Math.PI / 180;
   state.focus = rig.carDist;
