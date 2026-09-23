@@ -4,7 +4,7 @@ import { GroundedSkybox } from 'three/examples/jsm/objects/GroundedSkybox.js';
 import { loadHDR, analyse } from './env.js';
 import { Ground } from './ground.js';
 import { Post } from './post.js';
-import { LOCATIONS, bearingFromU } from './locations.js';
+import { LOCATIONS, bearingFromU, MAX_FOCAL } from './locations.js';
 import { PAINTS, makePaint, plateTexture } from './paint.js';
 import { buildUI } from './ui.js';
 
@@ -23,7 +23,7 @@ const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.1, 20
 camera.filmGauge = 36;
 
 export const state = {
-  focal: +(q.get('f') ?? 50), fstop: +(q.get('n') ?? 2.8), ev: +(q.get('ev') ?? 0), grain: +(q.get('grain') ?? 0.3), speed: +(q.get('kmh') ?? 0), previewSamples: +(q.get('ps') ?? 6),
+  focal: Math.min(+(q.get('f') ?? 50), MAX_FOCAL), fstop: +(q.get('n') ?? 2.8), ev: +(q.get('ev') ?? 0), grain: +(q.get('grain') ?? 0.3), speed: +(q.get('kmh') ?? 0), previewSamples: +(q.get('ps') ?? 6),
   vignette: 0.3, focus: 8, dof: q.get('dof') !== '0', loc: q.get('loc') ?? LOCATIONS[0].id, paint: q.get('paint') ?? 'rosso',
 };
 camera.setFocalLength(state.focal);
@@ -197,7 +197,7 @@ el.addEventListener('pointermove', e => {
   if (!drag) return; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (Math.hypot(dx, dy) > 5) drag.moved = true; if (!drag.moved) return;
-  if (pointers.size === 2 && drag.pinch) { const [a, b] = [...pointers.values()]; setFocal(THREE.MathUtils.clamp(drag.focal * Math.hypot(a.x - b.x, a.y - b.y) / drag.pinch, 18, 400)); ui?.sync(); return; }
+  if (pointers.size === 2 && drag.pinch) { const [a, b] = [...pointers.values()]; setFocal(THREE.MathUtils.clamp(drag.focal * Math.hypot(a.x - b.x, a.y - b.y) / drag.pinch, 18, MAX_FOCAL)); ui?.sync(); return; }
   if (drag.turn) { rig.carYaw = drag.yaw + dx * 0.008; return; }
   ndc.set(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
   if (ray.ray.intersectPlane(plane, hit)) { const d = Math.hypot(hit.x, hit.z); if (d > 4 && d < 150) { rig.carDist = d; rig.carBearing = Math.atan2(-hit.x, -hit.z); state.focus = d; } }
@@ -209,7 +209,7 @@ el.addEventListener('pointerup', e => {
     if (hits.length) { state.focus = hits[0].distance; ui?.focusPing(e.clientX, e.clientY); } }
   if (!pointers.size) drag = null;
 });
-el.addEventListener('wheel', e => { e.preventDefault(); setFocal(THREE.MathUtils.clamp(state.focal * Math.exp(-e.deltaY * 0.0012), 18, 400)); ui?.sync(); }, { passive: false });
+el.addEventListener('wheel', e => { e.preventDefault(); setFocal(THREE.MathUtils.clamp(state.focal * Math.exp(-e.deltaY * 0.0012), 18, MAX_FOCAL)); ui?.sync(); }, { passive: false });
 
 let ui = null;
 await Promise.all([setLocation(state.loc), loadCar()]);

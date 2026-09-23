@@ -1,0 +1,12 @@
+import puppeteer from 'puppeteer-core';
+const [url, out, w = 1280, h = 720] = process.argv.slice(2);
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 600000, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage(); p.on('pageerror', e => console.log('ERR', e.message)); p.on('console', m => { if (/error/i.test(m.type())) console.log('page:', m.text()); });
+await p.setViewport({ width: +w, height: +h });
+await p.goto(url, { waitUntil: 'load', timeout: 120000 });
+await p.waitForFunction('window.__ready', { timeout: 300000, polling: 2000 });
+await p.evaluate(() => document.querySelector('#shutter').click());
+await p.waitForFunction('document.querySelector("#reveal").classList.contains("show")', { timeout: 400000, polling: 2000 });
+await new Promise(r => setTimeout(r, 2600));
+await p.screenshot({ path: out });
+await b.close();
