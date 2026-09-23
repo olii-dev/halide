@@ -1,45 +1,164 @@
 const $ = (s) => document.querySelector(s);
 import { MAX_FOCAL } from './locations.js';
+import { LOOKS } from './post.js';
 const FSTOPS = [1.4, 1.8, 2, 2.8, 4, 5.6, 8, 11, 16, 22];
+const SHUTTERS = [15, 30, 60, 125, 250, 500, 1000];
+const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(d)}${u}`;
 
-export function buildUI({ state, rig, setLocation, setPaint, setFocal, exportPhoto, LOCATIONS, PAINTS }) {
-  const locs = $('#locs'), paints = $('#paints'), dials = $('#dials');
+// GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
+export function buildUI(api) {
+  const { state, rig, carS, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
+  const BASE = import.meta.env.BASE_URL, syncs = [];
+  // ---------- scene menu ----------
+  const grid = $('#menu .m-grid');
   for (const L of LOCATIONS) {
-    const b = document.createElement('button'); b.className = 'chip'; b.textContent = L.name; b.title = L.place; b.dataset.id = L.id;
-    b.onclick = async () => { mark(locs, L.id); toast(L.place); await setLocation(L.id); };
-    locs.appendChild(b);
+    const c = document.createElement('button'); c.className = 'card'; c.dataset.id = L.id;
+    c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg"><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
+    c.onclick = async () => { document.body.classList.remove('in-menu'); if (state.loc !== L.id) { await setLocation(L.id); } showScene(); syncAll(); };
+    grid.appendChild(c);
   }
-  for (const P of PAINTS) {
-    const b = document.createElement('button'); b.className = 'swatch'; b.style.background = P.color; b.title = P.name; b.dataset.id = P.id;
-    b.onclick = () => { mark(paints, P.id); setPaint(P.id); toast(P.name); };
-    paints.appendChild(b);
+  function showScene() { const L = LOCATIONS.find(l => l.id === state.loc); $('#sceneName').innerHTML = `<b>${L.name}</b> ${L.place}`; }
+  showScene();
+  $('#scenesBtn').onclick = () => document.body.classList.add('in-menu');
+  if (!new URLSearchParams(location.search).has('loc')) document.body.classList.add('in-menu');
+
+  // ---------- control builders ----------
+  const bodies = {};
+  for (const b of document.querySelectorAll('#panel .body')) bodies[b.dataset.body] = b;
+  let cur = null;
+  function section(tab, title) { const s = document.createElement('section'); s.className = 'sec'; s.innerHTML = `<h3>${title}</h3>`; bodies[tab].appendChild(s); cur = s; return s; }
+  function slider(o) {
+    const w = document.createElement('div'); w.className = 'ctl';
+    w.innerHTML = `<div class="top"><label>${o.label}</label><input class="val" inputmode="decimal" spellcheck="false"></div>
+      <div class="line"><button class="nd" aria-label="less">−</button><input type="range" min="${o.min}" max="${o.max}" step="${o.step ?? 'any'}"><button class="nd" aria-label="more">+</button></div>`;
+    const [minus, plus] = w.querySelectorAll('.nd'), r = w.querySelector('input[type=range]'), val = w.querySelector('.val');
+    const toR = o.toRange ?? (v => v), fromR = o.fromRange ?? (v => v);
+    const set = v => { o.set(v); changed(); };
+    r.oninput = () => { let v = fromR(+r.value); if (o.snap) v = o.snap(v); set(v); };
+    const nudge = d => { set(o.clamp ? o.clamp(o.get() + d) : Math.min(o.max_ ?? Infinity, Math.max(o.min_ ?? -Infinity, o.get() + d))); };
+    hold(minus, () => nudge(-(o.nudge ?? o.step))); hold(plus, () => nudge(o.nudge ?? o.step));
+    val.onchange = () => { const n = parseFloat(val.value.replace('−', '-')); if (isFinite(n)) set(o.parse ? o.parse(n) : n); else sync(); val.blur(); };
+    val.onfocus = () => val.select();
+    const sync = () => { r.value = toR(o.get()); if (document.activeElement !== val) val.value = o.fmt(o.get()); };
+    syncs.push(sync); sync(); cur.appendChild(w); return w;
   }
-  const dialDefs = [
-    { key: 'focal', label: 'FOCAL', min: 0, max: 1, step: 0.001, get: () => Math.log(state.focal / 18) / Math.log(MAX_FOCAL / 18),
-      set: v => setFocal(18 * Math.pow(MAX_FOCAL / 18, v)), fmt: () => `${Math.round(state.focal)}mm` },
-    { key: 'fstop', label: 'APERTURE', min: 0, max: FSTOPS.length - 1, step: 1, get: () => FSTOPS.indexOf(nearest(state.fstop)),
-      set: v => { state.fstop = FSTOPS[v]; }, fmt: () => `f/${state.fstop}` },
-    { key: 'ev', label: 'EXPOSURE', min: -3, max: 3, step: 0.1, get: () => state.ev, set: v => { state.ev = v; }, fmt: () => `${state.ev >= 0 ? '+' : ''}${state.ev.toFixed(1)}` },
-    { key: 'h', label: 'HEIGHT', min: 0.25, max: 1.7, step: 0.01, get: () => rig.camH, set: v => { rig.camH = v; }, fmt: () => `${rig.camH.toFixed(2)}m` },
-    { key: 'speed', label: 'WHEELS', min: 0, max: 200, step: 5, get: () => state.speed, set: v => { state.speed = v; }, fmt: () => state.speed ? `${state.speed} km/h` : 'still' },
-    { key: 'grain', label: 'GRAIN', min: 0, max: 1, step: 0.01, get: () => state.grain, set: v => { state.grain = v; }, fmt: () => `${Math.round(state.grain * 100)}` },
-  ];
-  const inputs = [];
-  for (const d of dialDefs) {
-    const w = document.createElement('div'); w.className = 'dial';
-    w.innerHTML = `<label>${d.label}</label><output></output><input type="range" min="${d.min}" max="${d.max}" step="${d.step}">`;
-    const inp = w.querySelector('input'), out = w.querySelector('output');
-    inp.value = d.get(); out.textContent = d.fmt();
-    inp.oninput = () => { d.set(+inp.value); out.textContent = d.fmt(); used(); };
-    inputs.push({ d, inp, out }); dials.appendChild(w);
+  function hold(btn, fn) { // press = one step, hold = repeat
+    let t = 0, i = 0; const stop = () => { clearTimeout(t); clearInterval(i); };
+    btn.addEventListener('pointerdown', e => { e.preventDefault(); fn(); t = setTimeout(() => { i = setInterval(fn, 60); }, 380); });
+    btn.addEventListener('pointerup', stop); btn.addEventListener('pointerleave', stop); btn.addEventListener('pointercancel', stop);
   }
+  function seg(o) {
+    const w = document.createElement('div'); w.className = 'ctl';
+    w.innerHTML = `${o.label ? `<div class="top"><label>${o.label}</label>${o.note ? `<span class="note">${o.note}</span>` : ''}</div>` : ''}<div class="seg${o.wrap ? ' wrap' : ''}"></div>`;
+    const box = w.querySelector('.seg');
+    for (const opt of o.options) { const b = document.createElement('button'); b.textContent = opt.name; b.dataset.id = opt.id; b.onclick = () => { o.set(opt.id); changed(); }; box.appendChild(b); }
+    const sync = () => { for (const b of box.children) b.classList.toggle('on', String(o.get()) === b.dataset.id); };
+    syncs.push(sync); sync(); cur.appendChild(w); return w;
+  }
+  function buttons(list) { const w = document.createElement('div'); w.className = 'btns';
+    for (const [name, fn] of list) { const b = document.createElement('button'); b.textContent = name; b.onclick = () => { fn(); changed(); }; w.appendChild(b); }
+    cur.appendChild(w); return w; }
+  function toggle(o) { return seg({ ...o, options: [{ id: 'false', name: o.off ?? 'Off' }, { id: 'true', name: o.on ?? 'On' }], get: () => String(o.get()), set: v => o.set(v === 'true') }); }
+  function changed() { syncAll(); markDirty(); document.body.classList.add('used'); }
+  function syncAll() { for (const s of syncs) s(); layoutFrame(); }
+  const wrapDeg = v => ((v % 360) + 360) % 360;
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+  // ---------- CAR ----------
+  section('car', 'Position');
+  slider({ label: 'Left / Right', min: -25, max: 25, step: 0.01, nudge: 0.05, get: () => carS.lat, set: v => { carS.lat = clamp(v, -25, 25); }, fmt: v => `${Math.abs(v) < 0.005 ? 'centre' : `${Math.abs(v).toFixed(2)} m ${v < 0 ? 'L' : 'R'}`}`, clamp: v => clamp(v, -25, 25) });
+  slider({ label: 'Near / Far', min: 3, max: 80, step: 0.01, nudge: 0.1, get: () => carS.near, set: v => { carS.near = clamp(v, 3, 80); }, fmt: v => `${v.toFixed(2)} m`, clamp: v => clamp(v, 3, 80),
+    toRange: v => v, fromRange: v => v });
+  buttons([['Centre', () => { carS.lat = 0; }], ['Aim camera at car', () => frameCar()]]);
+  section('car', 'Rotation');
+  let snap = true;
+  slider({ label: 'Heading', min: 0, max: 360, step: 1, nudge: 1, get: () => carS.rot, set: v => { carS.rot = wrapDeg(Math.round(v * 10) / 10); }, fmt: v => `${v.toFixed(v % 1 ? 1 : 0)}°`,
+    snap: v => (snap && !(window.event?.shiftKey || window.event?.altKey)) ? Math.round(v / 15) * 15 : v, clamp: wrapDeg });
+  seg({ label: 'Slider snaps', note: 'hold ⇧ for free', options: [{ id: 'true', name: 'Every 15°' }, { id: 'false', name: 'Free' }], get: () => String(snap), set: v => { snap = v === 'true'; } });
+  buttons([['Face camera', () => { carS.rot = 0; }], ['Front ¾', () => { carS.rot = 30; }], ['Side', () => { carS.rot = 90; }], ['Rear ¾', () => { carS.rot = 150; }], ['Rear', () => { carS.rot = 180; }]]);
+  section('car', 'Wheels');
+  slider({ label: 'Steering', min: -35, max: 35, step: 0.5, nudge: 1, get: () => carS.steer, set: v => { carS.steer = clamp(v, -35, 35); }, fmt: v => v === 0 ? 'straight' : `${Math.abs(v).toFixed(v % 1 ? 1 : 0)}° ${v > 0 ? 'left' : 'right'}`, clamp: v => clamp(v, -35, 35) });
+  slider({ label: 'Wheel spin', min: 0, max: 300, step: 5, nudge: 5, get: () => state.speed, set: v => { state.speed = clamp(v, 0, 300); }, fmt: v => v ? `${v} km/h` : 'parked', clamp: v => clamp(v, 0, 300) });
+  section('car', 'Lights');
+  seg({ label: 'Headlights', options: [{ id: 'off', name: 'Off' }, { id: 'on', name: 'On' }, { id: 'high', name: 'High beam' }], get: () => carS.lights, set: v => { carS.lights = v; applyLights(); } });
+  toggle({ label: 'Brake lights', get: () => carS.brake, set: v => { carS.brake = v; applyLights(); } });
+  section('car', 'Paint');
+  const sw = document.createElement('div'); sw.className = 'swatches'; cur.appendChild(sw);
+  for (const P of PAINTS) { const b = document.createElement('button'); b.className = 'swatch'; b.style.background = P.color; b.title = P.name; b.dataset.id = P.id;
+    b.onclick = () => { carS.color = null; setPaint(P.id); changed(); }; sw.appendChild(b); }
+  const pick = document.createElement('label'); pick.className = 'swatch custom'; pick.title = 'Custom colour'; pick.innerHTML = '<input type="color">'; sw.appendChild(pick);
+  const cin = pick.querySelector('input'); cin.oninput = () => { carS.color = cin.value; applyPaint(); changed(); };
+  const pname = document.createElement('div'); pname.className = 'pname'; cur.appendChild(pname);
+  syncs.push(() => { for (const b of sw.querySelectorAll('button')) b.classList.toggle('on', !carS.color && b.dataset.id === carS.paint); pick.classList.toggle('on', !!carS.color);
+    if (carS.color) pick.style.background = carS.color; pname.textContent = carS.color ? `Custom ${carS.color.toUpperCase()}` : PAINTS.find(p => p.id === carS.paint).name; });
+  seg({ label: 'Finish', wrap: true, options: FINISHES, get: () => carS.finish, set: v => { carS.finish = v; applyPaint(); } });
+  section('car', 'Drag on the photo');
+  seg({ note: 'off = dragging never moves anything', options: [{ id: 'off', name: 'Off' }, { id: 'rotate', name: 'Rotates car' }, { id: 'move', name: 'Moves car' }], get: () => state.dragMode, set: v => { state.dragMode = v; } , label: 'Drag' });
+
+  // ---------- CAMERA ----------
+  const lg = Math.log(MAX_FOCAL / 18);
+  section('camera', 'Lens');
+  slider({ label: 'Focal length', min: 0, max: 1, step: 0.001, nudge: 1, get: () => state.focal, set: v => setFocal(clamp(v, 18, MAX_FOCAL)),
+    toRange: v => Math.log(v / 18) / lg, fromRange: v => 18 * Math.exp(v * lg), fmt: v => `${Math.round(v)} mm`, clamp: v => clamp(Math.round(v), 18, MAX_FOCAL) });
+  buttons([[ '24', () => setFocal(24)], ['35', () => setFocal(35)], ['50', () => setFocal(50)], ['85', () => setFocal(85)], ['135', () => setFocal(135)]]).classList.add('mini');
+  toggle({ label: 'Zoom keeps car size', off: 'No', on: 'Dolly zoom', get: () => state.dollyZoom, set: v => { state.dollyZoom = v; } });
+  slider({ label: 'Aperture', min: 0, max: FSTOPS.length - 1, step: 1, nudge: 1, get: () => FSTOPS.indexOf(nearest(state.fstop)), set: v => { state.fstop = FSTOPS[clamp(Math.round(v), 0, FSTOPS.length - 1)]; },
+    fmt: i => `f/${FSTOPS[i]}`, parse: n => FSTOPS.indexOf(nearest(n)), clamp: v => clamp(v, 0, FSTOPS.length - 1) });
+  section('camera', 'Focus');
+  seg({ label: 'Focus on', note: 'or tap the photo', options: [{ id: 'car', name: 'The car' }, { id: 'manual', name: 'Manual' }], get: () => state.focusMode, set: v => { state.focusMode = v; if (v === 'car') state.focus = carDistance(); } });
+  const lf = Math.log(400);
+  slider({ label: 'Focus distance', min: 0, max: 1, step: 0.001, nudge: 0.1, get: () => state.focus, set: v => { state.focusMode = 'manual'; state.focus = clamp(v, 0.5, 200); },
+    toRange: v => Math.log(v / 0.5) / lf, fromRange: v => 0.5 * Math.exp(v * lf), fmt: v => `${v.toFixed(v < 10 ? 2 : 1)} m`, clamp: v => clamp(v, 0.5, 200) });
+  toggle({ label: 'Depth of field', get: () => state.dof, set: v => { state.dof = v; } });
+  section('camera', 'Exposure');
+  slider({ label: 'Exposure', min: -3, max: 3, step: 0.1, nudge: 0.1, get: () => state.ev, set: v => { state.ev = Math.round(clamp(v, -3, 3) * 10) / 10; }, fmt: v => signed(v, 1, ' EV') });
+  seg({ label: 'Shutter speed', note: 'blurs spinning wheels', wrap: true, options: SHUTTERS.map(s => ({ id: String(s), name: `1/${s}` })), get: () => String(state.shutter), set: v => { state.shutter = +v; } });
+  section('camera', 'Camera position');
+  const Lh = () => LOCATIONS.find(l => l.id === state.loc).height;
+  slider({ label: 'Height', min: 0.25, max: 1.7, step: 0.01, nudge: 0.02, get: () => rig.camH, set: v => { rig.camH = clamp(v, 0.25, Lh()); }, fmt: v => `${v.toFixed(2)} m`, clamp: v => clamp(v, 0.25, Lh()) });
+  slider({ label: 'Tilt', min: -25, max: 25, step: 0.1, nudge: 0.5, get: () => rig.tilt, set: v => { rig.tilt = clamp(v, -25, 25); }, fmt: v => signed(v, 1, '°'), clamp: v => clamp(v, -25, 25) });
+  slider({ label: 'Pan', min: -90, max: 90, step: 0.1, nudge: 0.5, get: () => rig.pan, set: v => { rig.pan = clamp(v, -90, 90); }, fmt: v => signed(v, 1, '°'), clamp: v => clamp(v, -90, 90) });
+  slider({ label: 'Roll (dutch angle)', min: -30, max: 30, step: 0.1, nudge: 0.5, get: () => rig.roll, set: v => { rig.roll = clamp(v, -30, 30); }, fmt: v => signed(v, 1, '°'), clamp: v => clamp(v, -30, 30) });
+  buttons([['Aim at car', () => frameCar()], ['Level', () => { rig.roll = 0; rig.tilt = 0; }]]);
+  section('camera', 'Scene');
+  slider({ label: 'Scene angle', min: -180, max: 180, step: 0.5, nudge: 1, get: () => rig.sceneAngle, set: v => { rig.sceneAngle = ((v + 540) % 360) - 180; }, fmt: v => signed(v, 1, '°') });
+  const sn = document.createElement('p'); sn.className = 'note'; sn.textContent = 'Turns the whole place around you and the car: picks which part of the location is behind the shot.'; cur.appendChild(sn);
+
+  // ---------- EFFECTS ----------
+  section('effects', 'Frame');
+  seg({ label: 'Aspect', wrap: true, options: ['free', '3:2', '16:9', '21:9', '1:1', '4:5', '2:3', '9:16'].map(a => ({ id: a, name: a === 'free' ? 'Screen' : a })), get: () => state.aspect, set: v => { state.aspect = v; } });
+  seg({ label: 'Grid', options: [{ id: 'off', name: 'Off' }, { id: 'thirds', name: 'Thirds' }, { id: 'centre', name: 'Centre' }], get: () => state.grid, set: v => { state.grid = v; } });
+  section('effects', 'Look');
+  seg({ wrap: true, options: Object.entries(LOOKS).map(([id, l]) => ({ id, name: l.name })), get: () => state.look, set: v => { state.look = v; } });
+  section('effects', 'Colour');
+  slider({ label: 'White balance', min: -1, max: 1, step: 0.01, nudge: 0.05, get: () => state.temp, set: v => { state.temp = clamp(v, -1, 1); }, fmt: v => Math.abs(v) < 0.005 ? 'as shot' : `${signed(v * 100, 0)} ${v > 0 ? 'warm' : 'cool'}`, parse: n => n / 100 });
+  slider({ label: 'Tint', min: -1, max: 1, step: 0.01, nudge: 0.05, get: () => state.tint, set: v => { state.tint = clamp(v, -1, 1); }, fmt: v => Math.abs(v) < 0.005 ? '0' : `${signed(v * 100, 0)} ${v > 0 ? 'magenta' : 'green'}`, parse: n => n / 100 });
+  slider({ label: 'Contrast', min: 0.6, max: 1.5, step: 0.01, nudge: 0.05, get: () => state.contrast, set: v => { state.contrast = clamp(v, 0.6, 1.5); }, fmt: v => signed((v - 1) * 100, 0), parse: n => 1 + n / 100 });
+  slider({ label: 'Saturation', min: 0, max: 2, step: 0.01, nudge: 0.05, get: () => state.saturation, set: v => { state.saturation = clamp(v, 0, 2); }, fmt: v => signed((v - 1) * 100, 0), parse: n => 1 + n / 100 });
+  section('effects', 'Lens effects');
+  slider({ label: 'Vignette', min: 0, max: 1, step: 0.01, nudge: 0.05, get: () => state.vignette, set: v => { state.vignette = clamp(v, 0, 1); }, fmt: v => `${Math.round(v * 100)}`, parse: n => n / 100 });
+  slider({ label: 'Film grain', min: 0, max: 1, step: 0.01, nudge: 0.05, get: () => state.grain, set: v => { state.grain = clamp(v, 0, 1); }, fmt: v => `${Math.round(v * 100)}`, parse: n => n / 100 });
+  slider({ label: 'Glow (bloom)', min: 0, max: 3, step: 0.05, nudge: 0.1, get: () => state.bloom, set: v => { state.bloom = clamp(v, 0, 3); }, fmt: v => `${Math.round(v * 100)}%`, parse: n => n / 100 });
+  buttons([['Reset effects', () => Object.assign(state, { look: 'none', temp: 0, tint: 0, contrast: 1, saturation: 1, vignette: 0.3, grain: 0.3, bloom: 1 })]]);
+
+  // ---------- tabs, panel, frame overlay ----------
+  const tabs = document.querySelectorAll('#panel .tabs [data-tab]');
+  function showTab(id) { for (const t of tabs) t.classList.toggle('on', t.dataset.tab === id); for (const [k, b] of Object.entries(bodies)) b.hidden = k !== id; }
+  for (const t of tabs) t.onclick = () => showTab(t.dataset.tab);
+  showTab('car');
+  const setPanel = open => { document.body.classList.toggle('panel-closed', !open); };
+  $('#hidePanel').onclick = () => setPanel(false); $('#panelBtn').onclick = () => setPanel(true);
+  addEventListener('keydown', e => { if (e.target.closest?.('input, textarea, select')) return; if (e.key === 'h') setPanel(document.body.classList.contains('panel-closed')); });
+  function layoutFrame() {
+    const fb = $('#frameBox'), r = cropRect();
+    Object.assign(fb.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+    fb.classList.toggle('masked', state.aspect !== 'free'); fb.dataset.grid = state.grid;
+  }
+  addEventListener('resize', layoutFrame);
   function nearest(v) { return FSTOPS.reduce((a, b) => Math.abs(b - v) < Math.abs(a - v) ? b : a); }
-  function mark(parent, id) { for (const c of parent.children) c.classList.toggle('on', c.dataset.id === id); used(); }
-  mark(locs, state.loc); mark(paints, state.paint); document.body.classList.remove('used');
-  function used() { document.body.classList.add('used'); }
   let tt; function toast(t) { const el = $('#toast'); el.textContent = t; el.classList.add('show'); clearTimeout(tt); tt = setTimeout(() => el.classList.remove('show'), 1600); }
   $('#aboutBtn').onclick = () => $('#about').showModal();
-  document.getElementById('stage').addEventListener('pointerdown', used, { once: true });
+  syncAll(); document.body.classList.remove('used');
   // capture: shutter sound + curtain, "developing" while the full-res render runs, then the print reveal
   let actx = null;
   function click() {
@@ -92,7 +211,7 @@ export function buildUI({ state, rig, setLocation, setPaint, setFocal, exportPho
       img.src = shot.url; await img.decode().catch(() => {});
       reveal.querySelector('.where').innerHTML = `<b>HALIDE</b>${L.name} · ${L.place}`;
       const bits = [`${Math.round(state.focal)}mm`, `f/${state.fstop}`, `${state.ev >= 0 ? '+' : ''}${state.ev.toFixed(1)} EV`];
-      if (state.speed > 0) bits.push(`1/60s · ${state.speed} km/h`);
+      bits.push(`1/${state.shutter}s`); if (state.speed > 0) bits.push(`${state.speed} km/h`); if (state.look !== 'none') bits.push(LOOKS[state.look].name);
       bits.push(`${w}×${h}`);
       reveal.querySelector('.exif').textContent = bits.join('  ·  ');
       document.body.classList.remove('developing');
@@ -100,9 +219,8 @@ export function buildUI({ state, rig, setLocation, setPaint, setFocal, exportPho
     } catch (e) { console.error(e); document.body.classList.remove('developing'); toast('Could not develop the photo on this device'); }
     s.classList.remove('busy');
   };
-  addEventListener('keydown', e => { if (e.key === 'h') document.body.classList.toggle('shooting'); });
   return {
-    sync() { for (const { d, inp, out } of inputs) { inp.value = d.get(); out.textContent = d.fmt(); } },
-    focusPing(x, y) { const r = $('#focusRing'); r.style.left = x + 'px'; r.style.top = y + 'px'; r.classList.add('show'); setTimeout(() => r.classList.remove('show'), 700); used(); },
+    sync: syncAll, toast,
+    focusPing(x, y) { const r = $('#focusRing'); r.style.left = x + 'px'; r.style.top = y + 'px'; r.classList.add('show'); setTimeout(() => r.classList.remove('show'), 700); },
   };
 }

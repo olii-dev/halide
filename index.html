@@ -11,17 +11,28 @@
 <body>
 <div id="stage"></div>
 <div id="boot"><div class="mark">HALIDE</div><div class="sub">developing…</div></div>
+<section id="menu" aria-label="Choose a scene">
+  <div class="m-head"><div class="m-title">HALIDE</div><div class="m-sub">SCAPES · choose a place to shoot</div></div>
+  <div class="m-grid"></div>
+</section>
 <header id="top">
   <div class="brand">HALIDE</div>
+  <div id="sceneName"></div>
+  <button id="scenesBtn" class="ghost pill">Scenes</button>
   <button id="aboutBtn" class="ghost" aria-label="About">i</button>
 </header>
-<div id="hint">drag the car to move it · drag anywhere else or swipe sideways to turn it · pinch or scroll to zoom · Q/E to turn · tap to focus</div>
-<nav id="dock">
-  <div class="group" id="locs"></div>
-  <div class="group" id="paints"></div>
-  <div class="group dials" id="dials"></div>
-  <button id="shutter" aria-label="Take photo"><span></span></button>
-</nav>
+<div id="frameBox"><i class="g"></i></div>
+<aside id="panel" aria-label="Photo controls">
+  <div class="tabs">
+    <button data-tab="car">Car</button><button data-tab="camera">Camera</button><button data-tab="effects">Effects</button>
+    <button id="hidePanel" aria-label="Hide controls" title="Hide controls (H)">⟩</button>
+  </div>
+  <div class="body" data-body="car"></div>
+  <div class="body" data-body="camera"></div>
+  <div class="body" data-body="effects"></div>
+</aside>
+<button id="panelBtn" class="pill">Controls</button>
+<button id="shutter" aria-label="Take photo"><span></span></button>
 <div id="focusRing"></div>
 <div id="flash"></div>
 <div id="curtain"><i></i><i></i></div>

@@ -35,10 +35,27 @@ export const PAINTS = [
   { id: 'gloss', name: 'Gloss Black', color: '#050505', metalness: 0.0, roughness: 0.2, flake: 0.0 },
 ];
 
+// finish presets override the paint's own surface (colour stays)
+export const FINISHES = [
+  { id: 'paint', name: 'Factory' },
+  { id: 'gloss', name: 'Gloss', metalness: 0.02, roughness: 0.18, flake: 0, clearRough: 0.02, iridescence: 0 },
+  { id: 'metallic', name: 'Metallic', metalness: 0.85, roughness: 0.32, flake: 0.5, clearRough: 0.03, iridescence: 0 },
+  { id: 'pearl', name: 'Pearl', metalness: 0.3, roughness: 0.3, flake: 0.25, clearRough: 0.03, iridescence: 0.4 },
+  { id: 'satin', name: 'Satin', metalness: 0.5, roughness: 0.5, flake: 0.15, clearRough: 0.38, iridescence: 0 },
+  { id: 'matte', name: 'Matte', metalness: 0.25, roughness: 0.72, flake: 0, clearcoat: 0, iridescence: 0 },
+];
+export function resolvePaint(presetId, finishId, color) {
+  const p = PAINTS.find(x => x.id === presetId) || PAINTS[0];
+  const f = FINISHES.find(x => x.id === finishId);
+  const out = { ...p, ...(f && f.id !== 'paint' ? f : {}), id: p.id, name: p.name };
+  if (color) out.color = color;
+  return out;
+}
+
 export function makePaint(p, template) {
   const m = new THREE.MeshPhysicalMaterial({
     color: new THREE.Color(p.color), metalness: p.metalness, roughness: p.roughness,
-    clearcoat: 1, clearcoatRoughness: p.clearRough ?? 0.03,
+    clearcoat: p.clearcoat ?? 1, clearcoatRoughness: p.clearRough ?? 0.03,
     normalMap: p.flake > 0 ? FLAKE : null, normalScale: new THREE.Vector2(p.flake, p.flake),
     iridescence: p.iridescence ?? 0, iridescenceIOR: 1.3, iridescenceThicknessRange: [250, 600],
     sheen: p.sheen ?? 0, sheenColor: new THREE.Color(p.sheenColor ?? '#000000'), sheenRoughness: 0.35,
