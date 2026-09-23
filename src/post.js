@@ -33,7 +33,17 @@ void main(){
   gl_FragColor = vec4(col / tot, 1.);
 }`;
 
+const downFS = `uniform sampler2D tMap; uniform vec2 px; varying vec2 vUv;
+void main(){ vec3 a = texture2D(tMap, vUv + px*vec2(-1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(-1.,1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,1.)).rgb;
+  vec3 c = a * 0.25; c = min(c, vec3(64.)); gl_FragColor = vec4(c, 1.); }`;
+const upFS = `uniform sampler2D tMap, tPrev; uniform vec2 px; varying vec2 vUv;
+void main(){ vec3 s = texture2D(tMap, vUv).rgb * 4.;
+  s += (texture2D(tMap, vUv + px*vec2(-1.,0.)).rgb + texture2D(tMap, vUv + px*vec2(1.,0.)).rgb + texture2D(tMap, vUv + px*vec2(0.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(0.,1.)).rgb) * 2.;
+  s += texture2D(tMap, vUv + px*vec2(-1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(-1.,1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,1.)).rgb;
+  gl_FragColor = vec4(s / 16. + texture2D(tPrev, vUv).rgb, 1.); }`;
+
 const finalFS = `
+uniform sampler2D tBloom; uniform float bloom;
 uniform sampler2D tColor; uniform float exposure, grain, vignette, time; uniform vec2 res;
 
 varying vec2 vUv;
@@ -41,7 +51,7 @@ varying vec2 vUv;
 
 float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 void main(){
-  vec3 c = texture2D(tColor, vUv).rgb * exposure;
+  vec3 c = mix(texture2D(tColor, vUv).rgb, texture2D(tBloom, vUv).rgb / 6.0, bloom) * exposure;
   vec2 q = vUv - 0.5; q.x *= res.x / res.y;
   c *= mix(1.0, smoothstep(1.25, 0.2, length(q)), vignette);
   c = AgXToneMapping(c);
@@ -64,7 +74,10 @@ export class Post {
       sensorH: { value: 24 }, maxCoC: { value: 24 }, radScale: { value: 1.2 } } });
     this.final = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: finalFS, uniforms: {
       tColor: { value: null }, exposure: { value: 1 }, grain: { value: 0.35 }, vignette: { value: 0.35 },
-      time: { value: 0 }, res: { value: new THREE.Vector2() }, toneMappingExposure: { value: 1 } } });
+      time: { value: 0 }, res: { value: new THREE.Vector2() }, toneMappingExposure: { value: 1 }, tBloom: { value: null }, bloom: { value: 0.045 } } });
+    this.down = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: downFS, uniforms: { tMap: { value: null }, px: { value: new THREE.Vector2() } } });
+    this.up = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: upFS, uniforms: { tMap: { value: null }, tPrev: { value: null }, px: { value: new THREE.Vector2() } } });
+    this.black = new THREE.DataTexture(new Uint8Array(4), 1, 1); this.black.needsUpdate = true;
     this.quad = new FullScreenQuad(this.dof);
     this.setSize(1, 1);
   }
@@ -74,6 +87,9 @@ export class Post {
     this.rtScene = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4,
       depthTexture: new THREE.DepthTexture(w, h, THREE.FloatType) });
     this.rtDof = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
+    this.mips?.forEach(m => { m.d.dispose(); m.u.dispose(); }); this.mips = [];
+    let mw = w, mh = h; for (let i = 0; i < 6; i++) { mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
+      this.mips.push({ d: new THREE.WebGLRenderTarget(mw, mh, { type: THREE.HalfFloatType }), u: new THREE.WebGLRenderTarget(mw, mh, { type: THREE.HalfFloatType }), w: mw, h: mh }); }
     this.dof.uniforms.res.value.set(w, h); this.final.uniforms.res.value.set(w, h);
   }
   render(scene, camera, opts, target = null) {
@@ -87,7 +103,14 @@ export class Post {
     u.maxCoC.value = opts.dof ? Math.max(4, this.h * 0.03) : 0;
     u.radScale.value = opts.quality === 'export' ? Math.max(0.4, u.maxCoC.value * u.maxCoC.value / 3600) : Math.max(1.4 * this.h / 900, u.maxCoC.value * u.maxCoC.value / 700);
     this.quad.material = this.dof; r.setRenderTarget(this.rtDof); this.quad.render(r);
-    const f = this.final.uniforms;
+    // bloom: 6-level downsample / tent upsample chain on the linear HDR image
+    let src = this.rtDof.texture, sw = this.w, sh = this.h;
+    this.quad.material = this.down;
+    for (const m of this.mips) { this.down.uniforms.tMap.value = src; this.down.uniforms.px.value.set(0.5 / sw, 0.5 / sh); r.setRenderTarget(m.d); this.quad.render(r); src = m.d.texture; sw = m.w; sh = m.h; }
+    this.quad.material = this.up; let prev = this.black;
+    for (let i = this.mips.length - 1; i >= 0; i--) { const m = this.mips[i]; this.up.uniforms.tMap.value = m.d.texture; this.up.uniforms.tPrev.value = prev;
+      this.up.uniforms.px.value.set(1 / m.w, 1 / m.h); r.setRenderTarget(m.u); this.quad.render(r); prev = m.u.texture; }
+    const f = this.final.uniforms; f.tBloom.value = prev;
     f.tColor.value = this.rtDof.texture; f.exposure.value = Math.pow(2, opts.ev); f.grain.value = opts.grain;
     f.vignette.value = opts.vignette; f.time.value = opts.animateGrain ? (performance.now() % 1000) : 0;
     this.quad.material = this.final; r.setRenderTarget(target); this.quad.render(r);
