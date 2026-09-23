@@ -1,10 +1,12 @@
-// CC0 HDRIs from Poly Haven (https://polyhaven.com). height = camera height
-// of the original capture in metres, used to project the ground plane.
+// CC0 HDRIs from Poly Haven (https://polyhaven.com).
+// height: camera height of the original capture (m), projects the ground.
+// u: horizontal panorama position (0..1) of a clear, flat spot for the car.
 export const LOCATIONS = [
-  { id: 'zwartkops_straight_afternoon', name: 'Zwartkops Straight', place: 'Pretoria, South Africa', height: 1.6, yaw: 0 },
-  { id: 'goegap_road', name: 'Goegap Road', place: 'Namaqualand, South Africa', height: 1.7, yaw: 0 },
-  { id: 'aarfontein_dawn_2', name: 'Karoo Dawn', place: 'Aarfontein, South Africa', height: 1.7, yaw: 0 },
-  { id: 'modern_evening_street', name: 'Evening Street', place: 'Urban, Europe', height: 1.7, yaw: 0 },
-  { id: 'wide_street_01', name: 'Wide Street', place: 'Urban, Europe', height: 1.7, yaw: 0 },
-  { id: 'cobblestone_street_night', name: 'Cobblestone Night', place: 'Old town, Europe', height: 1.7, yaw: 0 },
+  { id: 'zwartkops_straight_afternoon', name: 'Zwartkops', place: 'Race circuit, Pretoria', height: 1.6, u: 0.36 },
+  { id: 'goegap_road', name: 'Goegap', place: 'Desert road, Namaqualand', height: 1.7, u: 0.12 },
+  { id: 'wide_street_01', name: 'Boulevard', place: 'Wide street, midday', height: 1.7, u: 0.35 },
+  { id: 'modern_evening_street', name: 'Glass District', place: 'City street, evening', height: 1.7, u: 0.85 },
+  { id: 'cobblestone_street_night', name: 'Old Town', place: 'Cobblestones, night', height: 1.7, u: 0.45 },
+  { id: 'aarfontein_dawn_2', name: 'Karoo', place: 'Scrubland, dawn', height: 1.7, u: 0.5 },
 ];
+export function bearingFromU(u) { const t = (u - 0.5) * 2 * Math.PI; return Math.atan2(-Math.cos(t), -Math.sin(t)); }

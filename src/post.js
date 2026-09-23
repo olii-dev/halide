@@ -85,7 +85,7 @@ export class Post {
     u.sensorH.value = camera.getFilmHeight();
     // max blur scales with image height so previews and exports match
     u.maxCoC.value = opts.dof ? Math.max(4, this.h * 0.03) : 0;
-    u.radScale.value = opts.quality === 'export' ? 0.35 : 1.4 * Math.max(1, this.h / 900);
+    u.radScale.value = opts.quality === 'export' ? Math.max(0.4, u.maxCoC.value * u.maxCoC.value / 3600) : Math.max(1.4 * this.h / 900, u.maxCoC.value * u.maxCoC.value / 700);
     this.quad.material = this.dof; r.setRenderTarget(this.rtDof); this.quad.render(r);
     const f = this.final.uniforms;
     f.tColor.value = this.rtDof.texture; f.exposure.value = Math.pow(2, opts.ev); f.grain.value = opts.grain;

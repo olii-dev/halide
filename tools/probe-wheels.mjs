@@ -1,0 +1,10 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage(); await p.setViewport({ width: 1000, height: 563 });
+await p.goto('http://localhost:5173/?loc=zwartkops_straight_afternoon&sm=512&lo=1&dof=0&f=35&dist=7&h=0.35&dbg=1', { timeout: 120000 });
+await p.waitForFunction('window.__ready', { timeout: 150000 });
+console.log(await p.evaluate(() => { const { car, carHolder, THREE, camera } = window.halide; carHolder.updateMatrixWorld(true);
+  const r = []; car.traverse(o => { if (/^Wheel(Front|Rear)[LR]$/.test(o.name) || o.geometry?.type === 'CircleGeometry') { const bb = new THREE.Box3().setFromObject(o); const c = bb.getCenter(new THREE.Vector3()); const bot = new THREE.Vector3(c.x, bb.min.y, c.z).project(camera);
+    r.push([o.name || 'disk', bb.min.y.toFixed(3), ((bot.x + 1) / 2 * 1000).toFixed(0), ((1 - bot.y) / 2 * 563).toFixed(0)]); } });
+  return JSON.stringify({ r, fov: camera.fov, aspect: camera.aspect, filmGauge: camera.filmGauge, zoom: camera.zoom, view: camera.view }); }));
+await b.close();

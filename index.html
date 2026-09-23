@@ -1,3 +1,37 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Halide</title>
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block}</style></head>
-<body><script type="module" src="/src/main.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0a">
+<meta name="description" content="Halide: put a photoreal car into a real place, frame it like a real camera, keep the photo. Runs entirely in your browser.">
+<title>Halide - photo mode for the browser</title>
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="stage"></div>
+<div id="boot"><div class="mark">HALIDE</div><div class="sub">developing…</div></div>
+<header id="top">
+  <div class="brand">HALIDE</div>
+  <button id="aboutBtn" class="ghost" aria-label="About">i</button>
+</header>
+<div id="hint">drag to place the car · right-drag or two fingers to turn it · scroll or pinch to zoom · tap to focus</div>
+<nav id="dock">
+  <div class="group" id="locs"></div>
+  <div class="group" id="paints"></div>
+  <div class="group dials" id="dials"></div>
+  <button id="shutter" aria-label="Take photo"><span></span></button>
+</nav>
+<div id="focusRing"></div>
+<div id="flash"></div>
+<div id="toast"></div>
+<dialog id="about">
+  <h2>Halide</h2>
+  <p>Put a car into a real place and shoot it like a real camera. Everything runs in your browser. Nothing is uploaded.</p>
+  <p class="small">Car: "Car Concept" by Eric Chadwick / Darmstadt Graphics Group, from the Khronos glTF Sample Assets, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>. Based on a public-domain model by Unity Fan. Paint and badges changed.</p>
+  <p class="small">Locations: HDRIs from <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a>, CC0.</p>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
