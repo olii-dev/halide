@@ -9,6 +9,7 @@ import { MODELS } from './cars.js';
 import { PAINTS, FINISHES, makePaint, resolvePaint, plateTexture, paintById } from './paint.js';
 import { FACTORY_PAINTS } from './factory-paints.js';
 import { addDust, dustColor } from './dust.js';
+import { DustCloud } from './dustcloud.js';
 import { buildUI } from './ui.js';
 
 const q = new URLSearchParams(location.search);
@@ -263,6 +264,7 @@ function buildCar(s) {
   const lampM = new Set([...c.lightMats.head, ...c.lightMats.tail]), paintM = new Set(c.paintSlots.map(sl => sl.mesh));
   model.traverse(o => { const m = o.material; if (!o.isMesh || !m?.isMeshStandardMaterial || lampM.has(m) || paintM.has(o) || m.transparent || m.transmission > 0) return;
     let w = o.parent; while (w && !/^Wheel/.test(w.name)) w = w.parent; o.material = addDust(m.clone(), c.dustU, w ? 1.25 : 1); });
+  c.cloud = new DustCloud(dustColor); holder.add(c.cloud.mesh);
   applyPaint(c); applyLights(c); c.ground.bake(model);
   return c;
 }
@@ -409,6 +411,7 @@ function applyRig() {
   const L = LOCATIONS.find(l => l.id === state.loc); rig.camH = THREE.MathUtils.clamp(rig.camH, 0.25, L.height);
   const P = new THREE.Vector3(), box = new THREE.Box2();
   for (const c of cars) {
+    if (c.cloud) { if (!c.cloudReady && c.wheels.length) { c.cloud.setWheels(c); c.cloudReady = true; } c.cloud.update(c.s.kick ?? 0, state.speed); }
     computeCar(c.s, P); const toCam = Math.atan2(c.noseSign * -P.x, c.noseSign * -P.z);
     c.holder.position.set(P.x, 0, P.z); c.holder.rotation.y = toCam + THREE.MathUtils.degToRad(c.s.rot);
     applySteer(c); c.ground.setCarTransform(c.holder); box.expandByPoint(new THREE.Vector2(P.x, P.z));

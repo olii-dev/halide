@@ -142,6 +142,7 @@ export function buildUI(api) {
     if (carS.color) pick.style.background = carS.color; const P = paintById(carS.paint);
     pname.textContent = carS.color ? `Custom ${carS.color.toUpperCase()}` : P.code ? `${P.name} · ${P.code}` : P.name; });
   seg({ label: 'Finish', wrap: true, options: FINISHES, get: () => carS.finish, set: v => { carS.finish = v; applyPaint(); } });
+  slider({ label: 'Dust cloud', min: 0, max: 100, step: 1, nudge: 5, get: () => Math.round((carS.kick ?? 0) * 100), set: v => { carS.kick = clamp(v, 0, 100) / 100; markDirty(); }, fmt: v => v ? (state.speed ? `${v}%` : `${v}% · needs wheel spin`) : 'off', clamp: v => clamp(v, 0, 100) });
   slider({ label: 'Road dust', min: 0, max: 100, step: 1, nudge: 5, get: () => Math.round((carS.dust ?? 0) * 100), set: v => { carS.dust = clamp(v, 0, 100) / 100; applyDust(); }, fmt: v => v ? `${v}%` : 'clean', clamp: v => clamp(v, 0, 100) });
   section('car', 'Drag on the photo');
   seg({ note: 'off = dragging never moves anything', options: [{ id: 'off', name: 'Off' }, { id: 'rotate', name: 'Rotates car' }, { id: 'move', name: 'Moves car' }], get: () => state.dragMode, set: v => { state.dragMode = v; } , label: 'Drag' });
