@@ -41,7 +41,9 @@ export class Ground {
     });
     this.quad = new FullScreenQuad(this.blurMat);
 
-    const mat = new THREE.ShadowMaterial({ transparent: true, depthWrite: false });
+    // polygon offset: the catcher sits on the skybox's ground disc, which writes depth; without it the two
+    // z-fight and bright specks of unshadowed ground poke through the shadow (very visible on snow)
+    const mat = new THREE.ShadowMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
     mat.userData.uniforms = {
       tAO: { value: this.rtA.texture }, tC: { value: this.rtC.texture }, aoExtent: { value: this.extent },
       sunShare: { value: 0.6 }, carPos: { value: new THREE.Vector2() }, carYaw: { value: 0 }, aoStrength: { value: 1.0 }, contactStrength: { value: 1.0 }, useSun: { value: useSun ? 1 : 0 },
@@ -66,7 +68,7 @@ void main() {`)
     };
     this.catcher = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), mat);
     this.catcher.rotation.x = -Math.PI / 2;
-    this.catcher.position.y = 0.001;
+    this.catcher.position.y = 0.004;
     this.catcher.receiveShadow = true;
     this.catcher.renderOrder = 1;
     scene.add(this.catcher);
