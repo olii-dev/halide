@@ -22,7 +22,7 @@ function dirFromPixel(x, y, W, H, out) {
   return out.set(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
 }
 
-export function analyse(tex) {
+export function analyse(tex, { noSun = false } = {}) {
   const { data, width: W, height: H } = tex.image;
   const lum = (i) => 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
   const d = new THREE.Vector3();
@@ -37,7 +37,7 @@ export function analyse(tex) {
   sample.sort((a, b) => a - b);
   const median = sample[sample.length >> 1] || 1e-4;
   const sunDir = dirFromPixel(mx, my, W, H, new THREE.Vector3());
-  const hasSun = maxL > 40 * median && maxL > 5 && sunDir.y > -0.05;
+  const hasSun = !noSun && maxL > 40 * median && maxL > 5 && sunDir.y > -0.05;
 
   const dOmegaBase = (2 * Math.PI / W) * (Math.PI / H);
   const sunE = new THREE.Vector3();          // sun irradiance (normal incidence), rgb

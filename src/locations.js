@@ -1,12 +1,13 @@
 // CC0 HDRIs from Poly Haven (https://polyhaven.com).
 // height: camera height of the original capture (m), projects the ground.
+// sun: false when the brightest spot is not a real sun (dusk glow); soft: shadow blur multiplier for a near light (street lamp).
 // u: horizontal panorama position (0..1) of a clear, flat spot for the car.
 export const LOCATIONS = [
   { id: 'zwartkops_straight_afternoon', dust: '#8f8578', name: 'Zwartkops', place: 'Race circuit, Pretoria', height: 1.6, u: 0.31 },
   { id: 'goegap_road', dust: '#a57a5c', name: 'Goegap', place: 'Desert road, Namaqualand', height: 1.7, u: 0.462 },
   { id: 'wide_street_01', name: 'Boulevard', place: 'Wide street, midday', height: 1.7, u: 0.39 },
-  { id: 'modern_evening_street', name: 'Glass District', place: 'City street, evening', height: 1.7, u: 0.54 },
-  { id: 'cobblestone_street_night', name: 'Old Town', place: 'Cobblestones, night', height: 1.7, u: 0.46 },
+  { id: 'modern_evening_street', name: 'Glass District', place: 'City street, evening', height: 1.7, u: 0.595, sun: false },
+  { id: 'cobblestone_street_night', name: 'Old Town', place: 'Cobblestones, night', height: 1.7, u: 0.46, soft: 3.5 },
   { id: 'mealie_road', dust: '#a88f6e', name: 'Mealie Road', place: 'Farm road, golden hour', height: 1.7, u: 0.62 },
   { id: 'lonely_road_afternoon', dust: '#a88f6e', name: 'Lonely Road', place: 'Farm road, late sun', height: 1.7, u: 0.0 },
   { id: 'german_town_street', name: 'Stadtrand', place: 'Town edge, midday', height: 1.7, u: 0.12 },

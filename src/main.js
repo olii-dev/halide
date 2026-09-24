@@ -70,14 +70,14 @@ export async function setLocation(id, { keepCar = false } = {}) {
   state.loc = L.id; dustColor.value.set(L.dust || '#8f877c');
   const hdr = await loadHDR(`${BASE}assets/hdri/${L.id}_2k.hdr`);
   if (state.loc !== L.id) return;
-  const info = analyse(hdr);
+  const info = analyse(hdr, { noSun: L.sun === false });
   const envRT = pmrem.fromEquirectangular(info.envTex); info.envTex.dispose();
   const oldEnv = scene.environment; scene.environment = envRT.texture; oldEnv?.dispose?.();
   if (sky) { scene.remove(sky); sky.geometry.dispose(); sky.material.map?.dispose(); }
   sky = new GroundedSkybox(hdr, L.height, 400, 256);
   sky.material.depthWrite = true; sky.renderOrder = -1; sky.position.y = L.height;
   scene.add(sky); renderer.shadowMap.needsUpdate = true; markDirty();
-  sun.visible = info.hasSun;
+  sun.visible = info.hasSun; sun.shadow.radius = 10 * (L.soft ?? 1); sun.shadow.blurSamples = L.soft ? 32 : 20;
   sun.color.setRGB(info.sunColor.x, info.sunColor.y, info.sunColor.z, THREE.LinearSRGBColorSpace);
   sun.intensity = info.sunIntensity; sunDir.copy(info.sunDir);
   sunShare = info.sunShare; for (const c of cars) c.ground.sunShare = sunShare;
