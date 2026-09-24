@@ -5,6 +5,7 @@ import { loadHDR, analyse } from './env.js';
 import { Ground } from './ground.js';
 import { Post } from './post.js';
 import { LOCATIONS, bearingFromU, MAX_FOCAL } from './locations.js';
+import { MODELS } from './cars.js';
 import { PAINTS, FINISHES, makePaint, resolvePaint, plateTexture } from './paint.js';
 import { buildUI } from './ui.js';
 
@@ -35,7 +36,7 @@ const STATE0 = { ...state }, CAMH0 = +(q.get('h') ?? 1.1);
 // camera sits where the panorama was shot; the scene axis (base) is where the car goes
 export const rig = { camH: +(q.get('h') ?? 1.1), pan: 0, tilt: 0, roll: 0, sceneAngle: 0, base: 0, aimY: 0.6 };
 // the car: position in metres along the scene axis, heading relative to the camera (0 = nose to camera)
-const defaultCar = () => ({ lat: 0, near: 14, rot: 30, steer: 0, paint: q.get('paint') ?? 'rosso', finish: 'paint', color: null, lights: 'on', brake: false });
+const defaultCar = () => ({ model: 'concept', lat: 0, near: 14, rot: 30, steer: 0, paint: q.get('paint') ?? 'rosso', finish: 'paint', color: null, lights: 'on', brake: false });
 export const MAX_CARS = 4;
 export const cars = []; let active = null; // up to 4 cars; every CAR-tab control edits the active one
 export const carS = new Proxy({}, { get: (_, k) => active?.s[k], set: (_, k, v) => { active.s[k] = v; return true; } });
@@ -104,15 +105,18 @@ export function applyLights(c = active) {
   markDirty();
 }
 
-async function loadTemplate() {
-  const gltf = await new GLTFLoader().loadAsync(`${BASE}assets/cars/CarConcept.glb`);
-  const car = gltf.scene; car.updateMatrixWorld(true);
+const templates = {};
+function loadTemplate(id = 'concept') { return templates[id] ??= prepTemplate(MODELS.find(m => m.id === id) || MODELS[0]); }
+async function prepTemplate(cfg) {
+  const gltf = await new GLTFLoader().loadAsync(`${BASE}assets/cars/${cfg.file}`);
+  let car = gltf.scene; car.updateMatrixWorld(true);
+  if (!cfg.concept) car = normaliseModel(car, cfg);
   const box = new THREE.Box3().setFromObject(car, true);
   // sit on the tyres (not on whatever hangs lowest), with a hair of tyre squash
   const tyres = new THREE.Box3();
   car.traverse(o => { if (/^Wheel(Front|Rear)[LR]$/.test(o.name)) tyres.union(new THREE.Box3().setFromObject(o, true)); });
   car.position.y -= (tyres.isEmpty() ? box.min.y : tyres.min.y) + 0.006;
-  const size = box.getSize(new THREE.Vector3()); carRadius = size.length() / 2;
+  const size = box.getSize(new THREE.Vector3()); car.userData.radius = size.length() / 2;
   const plate = plateTexture(); plate.flipY = false;
   car.traverse(o => {
     if (!o.isMesh) return;
@@ -124,14 +128,34 @@ async function loadTemplate() {
     if (n === 'Tiretread') { o.material = o.material.clone(); o.material.roughness = 0.9; o.material.envMapIntensity = 0.7; }
     if (/^Paint 2/.test(n)) { o.material = o.material.clone(); o.material.normalMap = null; o.material.clearcoat = 0.6; o.material.clearcoatRoughness = 0.08; o.material.roughness = 0.45; }
   });
-  template = car;
+  car.userData.model = cfg.id;
+  return car;
+}
+// Sketchfab models: rotate so the nose points +z, scale to real length, and name the 4 road wheels
+// WheelFrontL/R, WheelRearL/R so steering, spin and ground contact work the same as the concept car.
+function normaliseModel(src, cfg) {
+  const root = new THREE.Group(), inner = new THREE.Group(); inner.add(src); root.add(inner); root.updateMatrixWorld(true);
+  let box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
+  if (size.x > size.z) inner.rotation.y = Math.PI / 2;
+  if (cfg.front === '-z') inner.rotation.y += Math.PI;
+  root.updateMatrixWorld(true); box = new THREE.Box3().setFromObject(root, true); size = box.getSize(new THREE.Vector3());
+  inner.scale.multiplyScalar(cfg.length / size.z); root.updateMatrixWorld(true);
+  box = new THREE.Box3().setFromObject(root, true); const ctr = box.getCenter(new THREE.Vector3());
+  inner.position.x -= ctr.x; inner.position.z -= ctr.z; root.updateMatrixWorld(true); box = new THREE.Box3().setFromObject(root, true);
+  const H = box.max.y - box.min.y, found = [];
+  src.traverse(o => { if (!o.isMesh && o.children.some(c => c.isMesh && cfg.tire.includes(c.material.name))) found.push(o); });
+  const wheels = found.map(o => ({ o, c: new THREE.Box3().setFromObject(o, true).getCenter(new THREE.Vector3()) })).filter(w => w.c.y < box.min.y + 0.4 * H);
+  for (const w of wheels) w.o.name = `Wheel${w.c.z > 0 ? 'Front' : 'Rear'}${w.c.x > 0 ? 'L' : 'R'}`;
+  const paint = new Set(cfg.paint), hide = new Set(cfg.hide || []);
+  src.traverse(o => { if (!o.isMesh) return; const n = o.material.name; if (paint.has(n)) o.material.name = 'Paint 1'; if (hide.has(n)) o.visible = false; });
+  return root;
 }
 
 // one car in the scene: its own model copy, paint, lights, wheels and contact shadow
-export function addCar(s = null) {
-  if (cars.length >= MAX_CARS) return null;
+function buildCar(s) {
+  const template = templates[s.model]?.ready;
   const model = template.clone(true), holder = new THREE.Group(); holder.add(model); scene.add(holder);
-  const c = { s: s ?? defaultCar(), model, holder, paintSlots: [], lightMats: { head: [], tail: [] }, wheels: [], steers: [], noseSign: 1,
+  const c = { s, model, holder, paintSlots: [], lightMats: { head: [], tail: [] }, wheels: [], steers: [], noseSign: 1,
     ground: new Ground(renderer, scene, { useSun: cars.length === 0 }) };
   c.ground.sunShare = sunShare;
   model.traverse(o => {
@@ -141,8 +165,23 @@ export function addCar(s = null) {
     if (n === 'Brakelight') { o.material = o.material.clone(); c.lightMats.tail.push(o.material); }
   });
   buildWheels(c); applyPaint(c); applyLights(c); c.ground.bake(model);
-  cars.push(c); active = c; renderer.shadowMap.needsUpdate = true; markDirty();
   return c;
+}
+export function addCar(s = null) {
+  if (cars.length >= MAX_CARS) return null;
+  s = s ?? defaultCar(); if (!templates[s.model]?.ready) s.model = 'concept';
+  const c = buildCar(s); cars.push(c); active = c; renderer.shadowMap.needsUpdate = true; markDirty();
+  return c;
+}
+// swap one car's model in place, keeping its position, paint and settings
+export async function setCarModel(c, id) {
+  const t = await loadTemplate(id); templates[id].ready = t;
+  const i = cars.indexOf(c); if (i < 0) return;
+  const s = { ...c.s, model: id }, useSun = c.ground.catcher.material.userData.uniforms.useSun.value;
+  scene.remove(c.holder); c.ground.dispose();
+  const nc = buildCar(s); nc.ground.catcher.material.userData.uniforms.useSun.value = useSun;
+  cars[i] = nc; if (active === c) active = nc; renderer.shadowMap.needsUpdate = true; markDirty(); ui?.sync();
+  return nc;
 }
 export function duplicateCar() {
   if (!active || cars.length >= MAX_CARS) return null;
@@ -169,6 +208,14 @@ function buildWheels(c) {
   // collect first: re-parenting inside traverse() shifts sibling indices and skips the next wheel
   const found = []; car.traverse(o => { if (/^Wheel(Front|Rear)[LR]$/.test(o.name)) found.push(o); });
   found.forEach(o => {
+    if (/Front/.test(o.name)) {
+      // some source files pose the front wheels already steered; square them to the body so 0 deg really is straight
+      o.updateMatrixWorld(true); const aC = new THREE.Vector3(1, 0, 0).transformDirection(o.matrixWorld).transformDirection(invCar);
+      if (aC.x < 0) aC.negate(); const baked = Math.atan2(-aC.z, aC.x);
+      if (Math.abs(baked) > 0.002) { const P0 = o.parent; P0.updateMatrixWorld(true);
+        const upP = new THREE.Vector3(0, 1, 0).transformDirection(car.matrixWorld).transformDirection(new THREE.Matrix4().copy(P0.matrixWorld).invert()).normalize();
+        o.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(upP, -baked)); o.updateMatrixWorld(true); }
+    }
     const spin = o.children.filter(c => !/BrakePad/.test(c.name));
     const bb = new THREE.Box3(); spin.forEach(c => bb.union(new THREE.Box3().setFromObject(c, true)));
     const cW = bb.getCenter(new THREE.Vector3()), radius = (bb.max.y - bb.min.y) / 2;
@@ -200,7 +247,7 @@ const subframe = t => spinWheels(t);
 function frame() {
   const vfov = 2 * Math.atan(camera.getFilmHeight() / 2 / camera.getFocalLength());
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * VW() / VH());
-  carS.near = +(q.get('dist') ?? (carRadius * (VW() < VH() ? 1.15 : 0.95) / Math.tan(Math.min(vfov, hfov) / 2)));
+  carS.near = +(q.get('dist') ?? ((active?.model.userData.radius ?? carRadius) * (VW() < VH() ? 1.15 : 0.95) / Math.tan(Math.min(vfov, hfov) / 2)));
   if (q.has('yaw')) carS.rot = +q.get('yaw');
 }
 
@@ -355,10 +402,11 @@ addEventListener('keydown', e => {
 });
 
 let ui = null;
-await Promise.all([setLocation(state.loc), loadTemplate()]);
-addCar();
+await Promise.all([setLocation(state.loc), loadTemplate('concept').then(t => { templates.concept.ready = t; })]);
+if (q.get('car') && q.get('car') !== 'concept') { const t = await loadTemplate(q.get('car')).catch(() => null); if (t) templates[q.get('car')].ready = t; }
+addCar(q.get('car') && templates[q.get('car')]?.ready ? { ...defaultCar(), model: q.get('car') } : null);
 resize(); frame();
-ui = buildUI({ resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
+ui = buildUI({ setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
 function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
@@ -381,5 +429,5 @@ let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() =>
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
+window.halide = { setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);
