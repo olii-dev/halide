@@ -1,0 +1,14 @@
+import puppeteer from 'puppeteer-core';
+const M = process.env.M || 'bmwm3e30', K = process.env.K || '0', S = +(process.env.S || 30), R = +(process.env.R || 1);
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 100000, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--js-flags=--max-old-space-size=384', '--renderer-process-limit=1'] });
+const p = await b.newPage(); p.on('pageerror', e => console.log('ERR', e.message));
+await p.setViewport({ width: 1000, height: 640 });
+await p.goto(`http://localhost:4173/?loc=goegap_road&dof=0&sm=1024&lo=1&f=50&grain=0&ca=0&kmh=${K}`, { waitUntil: 'load', timeout: 60000 }); await p.waitForFunction('window.__ready', { timeout: 60000 });
+const info = await p.evaluate(async (M, S, R) => { document.body.classList.remove('in-menu'); document.querySelector('#panel').style.display = 'none';
+  await halide.setCarModel(halide.cars[0], M); const c = halide.cars[0]; c.s.rot = R; c.s.steer = S; c.s.near = 9; halide.markDirty();
+  const d = []; c.model.updateMatrixWorld(true); const m = new halide.THREE.Matrix4();
+  for (const st of c.steers) d.push({ det: +st.g.parent.matrixWorld.determinant().toFixed(3), name: st.g.children[0]?.name });
+  return d; }, M, S, R);
+console.log(JSON.stringify(info));
+await new Promise(r => setTimeout(r, +(process.env.W || 20000))); await p.screenshot({ path: `/tmp/wheel-${M}-${K}-${S}.png` }); console.log('shot');
+await b.close();
