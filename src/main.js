@@ -221,8 +221,12 @@ function buildCar(s) {
   model.traverse(o => {
     if (!o.isMesh) return; o.layers.enable(1); const n = o.material.name || '';
     if (/^Paint 1/.test(n)) c.paintSlots.push({ mesh: o, original: o.material });
-    if (n === 'Headlight') { o.material = o.material.clone(); c.lightMats.head.push(o.material); }
-    if (n === 'Brakelight') { o.material = o.material.clone(); c.lightMats.tail.push(o.material); }
+    // lamps: the concept names them Headlight/Brakelight; licensed models list their lamp materials in cars.js
+    const cfg = MODELS.find(m => m.id === s.model) || {};
+    const isHead = n === 'Headlight' || cfg.head?.includes(n), isTail = n === 'Brakelight' || cfg.tail?.includes(n);
+    if (isHead || isTail) { o.material = o.material.clone();
+      if (cfg.head || cfg.tail) { const m = o.material; if (!m.emissive || m.emissive.getHex() === 0 || !m.emissiveMap) m.emissive = new THREE.Color(isHead ? '#fff1dc' : '#ff1a0a'); }
+      (isHead ? c.lightMats.head : c.lightMats.tail).push(o.material); }
   });
   buildWheels(c); applyPaint(c); applyLights(c); c.ground.bake(model);
   return c;
@@ -504,5 +508,5 @@ let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() =>
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
+window.halide = { applyLights, snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);
