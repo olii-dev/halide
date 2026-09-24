@@ -126,6 +126,11 @@ async function prepTemplate(cfg) {
     // rubber: the source file has glossy sidewalls (0.4) that mirror warm skies as tan
     if (n === 'Tireside') { o.material = o.material.clone(); o.material.roughness = 0.82; o.material.envMapIntensity = 0.75; }
     if (n === 'Tiretread') { o.material = o.material.clone(); o.material.roughness = 0.9; o.material.envMapIntensity = 0.7; }
+    // glass: the source files fake it with alpha-blended grey, which washes a milky film over the cabin and
+    // dims the reflections. Real glass passes light through (tinted) and reflects by Fresnel at full strength.
+    const tint = cfg.glass?.[n];
+    if (tint !== undefined) { const g = new THREE.MeshPhysicalMaterial({ name: n, color: new THREE.Color().setScalar(tint), metalness: 0, roughness: 0.02,
+      transmission: 1, thickness: 0, ior: 1.5, transparent: false, side: THREE.DoubleSide, envMapIntensity: 1, specularIntensity: 1 }); o.material = g; o.castShadow = false; }
     if (/^Paint 2/.test(n)) { o.material = o.material.clone(); o.material.normalMap = null; o.material.clearcoat = 0.6; o.material.clearcoatRoughness = 0.08; o.material.roughness = 0.45; }
   });
   car.userData.model = cfg.id;

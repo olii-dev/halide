@@ -32,13 +32,13 @@ export const PAINTS = [
   { id: 'racing', name: 'Racing Green', color: '#0c2a17', metalness: 0.5, roughness: 0.3, flake: 0.5 },
   { id: 'solar', name: 'Solar Orange', color: '#d2480a', metalness: 0.35, roughness: 0.3, flake: 0.35 },
   { id: 'graphite', name: 'Satin Graphite', color: '#2a2b2d', metalness: 0.65, roughness: 0.55, flake: 0.3, clearRough: 0.35 },
-  { id: 'gloss', name: 'Gloss Black', color: '#050505', metalness: 0.0, roughness: 0.2, flake: 0.0 },
+  { id: 'gloss', name: 'Gloss Black', color: '#040404', metalness: 0.0, roughness: 0.45, flake: 0.0, clearRough: 0.012 },
 ];
 
 // finish presets override the paint's own surface (colour stays)
 export const FINISHES = [
   { id: 'paint', name: 'Factory' },
-  { id: 'gloss', name: 'Gloss', metalness: 0.02, roughness: 0.18, flake: 0, clearRough: 0.02, iridescence: 0 },
+  { id: 'gloss', name: 'Gloss', metalness: 0.02, roughness: 0.4, flake: 0, clearRough: 0.012, iridescence: 0 },
   { id: 'metallic', name: 'Metallic', metalness: 0.85, roughness: 0.32, flake: 0.5, clearRough: 0.03, iridescence: 0 },
   { id: 'pearl', name: 'Pearl', metalness: 0.3, roughness: 0.3, flake: 0.25, clearRough: 0.03, iridescence: 0.4 },
   { id: 'satin', name: 'Satin', metalness: 0.5, roughness: 0.5, flake: 0.15, clearRough: 0.38, iridescence: 0 },
@@ -60,6 +60,9 @@ export function makePaint(p, template) {
     iridescence: p.iridescence ?? 0, iridescenceIOR: 1.3, iridescenceThicknessRange: [250, 600],
     sheen: p.sheen ?? 0, sheenColor: new THREE.Color(p.sheenColor ?? '#000000'), sheenRoughness: 0.35,
     specularColor: new THREE.Color(p.spec ?? '#ffffff'),
+    // under a clearcoat the basecoat's own shine is weak: without this, solid and dark paints get a broad
+    // soft highlight on top of the coat's sharp one, which is exactly what makes them read as plastic
+    specularIntensity: p.metalness > 0.5 ? 1 : 0.25,
     envMapIntensity: 1, side: THREE.DoubleSide,
   });
   if (m.normalMap) { m.normalMap = FLAKE.clone(); m.normalMap.repeat.set(24, 24); m.normalMap.needsUpdate = true; }
