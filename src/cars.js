@@ -6,7 +6,7 @@ export const MODELS = [
   { id: 'porsche930', name: 'Porsche 911 Turbo (930)', year: 1975, file: 'porsche930.glb', tire: ['930_tire'], paint: ['paint'], hide: ['material_0'], glass: { glass: 0.6 }, length: 4.29, front: '+z',
     credit: '"FREE 1975 Porsche 911 (930) Turbo" by Lionsharp Studios, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/free-1975-porsche-911-930-turbo-8568d9d14a994b9cae59499f0dbed21e' },
   { id: 'bmwm3e30', name: 'BMW M3 (E30)', year: 1987, file: 'bmwm3e30.glb', tire: ['BMW_E30_M3_TIRE'], spin: ['BMW_E30_M3_RIM', 'Brake_Disc'], fixed: ['Brembo_Calipers', 'Logo_Plane'],
-    paint: ['BMW_E30_M3_PAINT'], hide: [], glass: { BMW_E30_M3_WINDOWS: 0.55 }, head: ['BMW_E30_M3_HEADLIGHT_REFLECTOR'], tail: ['BMW_E30_M3_TAILLIGHT_REFLECTOR'], length: 4.345, front: '+z',
+    paint: ['BMW_E30_M3_PAINT'], hide: [], glass: { BMW_E30_M3_WINDOWS: 0.55, BMW_E30_M3_LENS: 1 }, head: ['BMW_E30_M3_HEADLIGHT_REFLECTOR'], tail: ['BMW_E30_M3_TAILLIGHT_REFLECTOR'], lens: ['BMW_E30_M3_LENS'], length: 4.345, front: '+z',
     credit: '"[FREE] BMW M3 E30" by Martin Trafas, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/free-bmw-m3-e30-ac3c7013434e403e8faff87948caf422' },
   { id: 'nsx90', name: 'Honda NSX', year: 1990, file: 'nsx90.glb', tire: ['Material.011'], paint: ['Material.003'], hide: [], hideNodes: ['Plane_11', 'Plane.001_13'], glass: { 'Material.004': 0.3 }, head: ['Material.013'], tail: ['Material.009'], length: 4.405, front: '+z',
     credit: '"Honda NSX 1990" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/honda-nsx-1990-1cc15628a00a4739a6b6c01128927c8d' },

@@ -100,8 +100,8 @@ export function applyPaint(c = active) {
 }
 export function applyLights(c = active) {
   const head = { off: 0, on: 1.6, high: 7 }[c.s.lights] ?? 1, tail = c.s.brake ? 6 : (c.s.lights === 'off' ? 0 : 1);
-  for (const m of c.lightMats.head) m.emissiveIntensity = head;
-  for (const m of c.lightMats.tail) m.emissiveIntensity = tail;
+  for (const m of c.lightMats.head) m.emissiveIntensity = head * (m.userData.gain ?? 1);
+  for (const m of c.lightMats.tail) m.emissiveIntensity = tail * (m.userData.gain ?? 1);
   markDirty();
 }
 
@@ -211,6 +211,20 @@ function splitMergedWheels(root, src, cfg, box, H, corner) {
   }
 }
 
+// cut the triangles on one end of the car (dir 1 = front, -1 = rear) out of a mesh into their own sibling mesh
+function splitByZ(o, model, dir) {
+  const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(), pos = g.attributes.position, n = pos.count / 3;
+  const M = new THREE.Matrix4().copy(model.matrixWorld).invert().multiply(o.matrixWorld), v = new THREE.Vector3(), keepA = [], keepB = [];
+  for (let t = 0; t < n; t++) { let z = 0; for (let k = 0; k < 3; k++) z += v.fromBufferAttribute(pos, t * 3 + k).applyMatrix4(M).z; (z * dir > 0 ? keepA : keepB).push(t); }
+  if (!keepA.length) return null;
+  const pick = list => { const out = new THREE.BufferGeometry();
+    for (const [name, a] of Object.entries(g.attributes)) { const arr = new a.array.constructor(list.length * 3 * a.itemSize);
+      list.forEach((t, i) => arr.set(a.array.subarray(t * 3 * a.itemSize, (t * 3 + 3) * a.itemSize), i * 3 * a.itemSize)); out.setAttribute(name, new THREE.BufferAttribute(arr, a.itemSize, a.normalized)); }
+    return out; };
+  const lit = new THREE.Mesh(pick(keepA), o.material); lit.name = o.name + '_lit'; lit.castShadow = o.castShadow; lit.receiveShadow = o.receiveShadow; lit.layers.mask = o.layers.mask;
+  lit.position.copy(o.position); lit.quaternion.copy(o.quaternion); lit.scale.copy(o.scale); o.parent.add(lit);
+  o.geometry = pick(keepB); return lit;
+}
 // one car in the scene: its own model copy, paint, lights, wheels and contact shadow
 function buildCar(s) {
   const template = templates[s.model]?.ready;
@@ -218,16 +232,27 @@ function buildCar(s) {
   const c = { s, model, holder, paintSlots: [], lightMats: { head: [], tail: [] }, wheels: [], steers: [], noseSign: 1,
     ground: new Ground(renderer, scene, { useSun: cars.length === 0 }) };
   c.ground.sunShare = sunShare;
+  const lamps = [];
   model.traverse(o => {
     if (!o.isMesh) return; o.layers.enable(1); const n = o.material.name || '';
     if (/^Paint 1/.test(n)) c.paintSlots.push({ mesh: o, original: o.material });
     // lamps: the concept names them Headlight/Brakelight; licensed models list their lamp materials in cars.js
     const cfg = MODELS.find(m => m.id === s.model) || {};
-    const isHead = n === 'Headlight' || cfg.head?.includes(n), isTail = n === 'Brakelight' || cfg.tail?.includes(n);
+    let isHead = n === 'Headlight' || cfg.head?.includes(n), isTail = n === 'Brakelight' || cfg.tail?.includes(n);
+    // a lamp material shared front and back (e.g. E30 reflectors) only lights on the matching end of the car (nose is +z)
+    if ((cfg.head || cfg.tail) && (isHead || isTail)) { const z = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3()).applyMatrix4(new THREE.Matrix4().copy(model.matrixWorld).invert()).z;
+      const bb = new THREE.Box3().setFromObject(o), toM = new THREE.Matrix4().copy(model.matrixWorld).invert(), lo = bb.min.clone().applyMatrix4(toM).z, hi = bb.max.clone().applyMatrix4(toM).z;
+      if (Math.min(lo, hi) < -0.5 && Math.max(lo, hi) > 0.5) { const lit = splitByZ(o, model, isHead ? 1 : -1); if (lit) { lamps.push([lit, isHead]); isHead = isTail = false; } }
+      else { if (isHead && z < 0) isHead = false; if (isTail && z > 0) isTail = false; } }
+    // clear lamp lenses shared front and back: the rear half is red glass, as on the real cars
+    if (cfg.lens?.includes(n)) { const r = splitByZ(o, model, -1); if (r) lamps.push([r, 'lens']); }
     if (isHead || isTail) { o.material = o.material.clone();
-      if (cfg.head || cfg.tail) { const m = o.material; if (!m.emissive || m.emissive.getHex() === 0 || !m.emissiveMap) m.emissive = new THREE.Color(isHead ? '#fff1dc' : '#ff1a0a'); }
+      // source emissive maps are unreliable (often UV'd onto dark atlas areas), so glow through the lamp's own
+      // colour texture: reflectors, LEDs and lenses light up where they are bright, housings stay darker
+      if (cfg.head || cfg.tail) { const m = o.material; m.emissive = new THREE.Color(isHead ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = isHead ? 5 : 0.9; if (!isHead) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } m.needsUpdate = true; }
       (isHead ? c.lightMats.head : c.lightMats.tail).push(o.material); }
   });
+  for (const [o, head] of lamps) { if (head === 'lens') { const g = o.material = o.material.clone(); g.color = new THREE.Color('#ff1208'); g.roughness = 0.05; continue; } const m = o.material = o.material.clone(); m.emissive = new THREE.Color(head ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = head ? 5 : 0.9; if (!head) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } (head ? c.lightMats.head : c.lightMats.tail).push(m); }
   buildWheels(c); applyPaint(c); applyLights(c); c.ground.bake(model);
   return c;
 }

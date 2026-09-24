@@ -4,9 +4,9 @@ const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', hea
 const p = await b.newPage(); p.on('pageerror', e => console.log('ERR', e.message));
 await p.setViewport({ width: 1000, height: 640 });
 await p.goto(`http://localhost:4173/?loc=cobblestone_street_night&dof=0&sm=1024&lo=1&f=50&grain=0&ca=0`, { waitUntil: 'load', timeout: 60000 }); await p.waitForFunction('window.__ready', { timeout: 60000 });
-const info = await p.evaluate(async (M, R) => { document.body.classList.remove('in-menu'); document.querySelector('#panel').style.display = 'none';
-  await halide.setCarModel(halide.cars[0], M); const c = halide.cars[0]; c.s.rot = R; c.s.near = 8; c.s.lights = 'high'; c.s.brake = true; halide.applyLights(c);
-  return [c.lightMats.head.length, c.lightMats.tail.length]; }, M, R);
+const info = await p.evaluate(async (M, R, DBG, BR) => { document.body.classList.remove('in-menu'); document.querySelector('#panel').style.display = 'none';
+  await halide.setCarModel(halide.cars[0], M); const c = halide.cars[0]; c.s.rot = R; c.s.near = 8; c.s.lights = 'on'; c.s.brake = BR; halide.applyLights(c); if (DBG) for (const m of [...c.lightMats.head, ...c.lightMats.tail]) { m.emissive.set('#00ff00'); m.emissiveMap = null; m.emissiveIntensity = 20; m.needsUpdate = true; } halide.markDirty();
+  return [c.lightMats.head.length, c.lightMats.tail.length]; }, M, R, !!process.env.DBG, process.env.B !== '0');
 console.log(M, 'head/tail mats', JSON.stringify(info));
 await new Promise(r => setTimeout(r, 18000)); await p.screenshot({ path: `/tmp/light-${M}-${R}.png` }); console.log('shot');
 await b.close();
