@@ -8,4 +8,6 @@ export const MODELS = [
   { id: 'bmwm3e30', name: 'BMW M3 (E30)', year: 1987, file: 'bmwm3e30.glb', tire: ['BMW_E30_M3_TIRE'], spin: ['BMW_E30_M3_RIM', 'Brake_Disc'], fixed: ['Brembo_Calipers', 'Logo_Plane'],
     paint: ['BMW_E30_M3_PAINT'], hide: [], length: 4.345, front: '+z',
     credit: '"[FREE] BMW M3 E30" by Martin Trafas, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/free-bmw-m3-e30-ac3c7013434e403e8faff87948caf422' },
+  { id: 'nsx90', name: 'Honda NSX', year: 1990, file: 'nsx90.glb', tire: ['Material.011'], paint: ['Material.003'], hide: [], hideNodes: ['Plane_11', 'Plane.001_13'], length: 4.405, front: '+z',
+    credit: '"Honda NSX 1990" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/honda-nsx-1990-1cc15628a00a4739a6b6c01128927c8d' },
 ];

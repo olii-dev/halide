@@ -136,7 +136,8 @@ async function prepTemplate(cfg) {
 function normaliseModel(src, cfg) {
   // drop baked shadow planes etc. first so they don't count toward size or ground contact
   const hide = new Set(cfg.hide || []), drop = [];
-  src.traverse(o => { if (o.isMesh && hide.has(o.material.name)) drop.push(o); }); for (const o of drop) o.removeFromParent();
+  const hideNodes = new Set(cfg.hideNodes || []);
+  src.traverse(o => { if ((o.isMesh && hide.has(o.material.name)) || hideNodes.has(o.name)) drop.push(o); }); for (const o of drop) o.removeFromParent();
   const root = new THREE.Group(), inner = new THREE.Group(); inner.add(src); root.add(inner); root.updateMatrixWorld(true);
   let box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
   if (size.x > size.z) inner.rotation.y = Math.PI / 2;
@@ -228,7 +229,9 @@ function buildWheels(c) {
   found.forEach(o => {
     if (/Front/.test(o.name)) {
       // some source files pose the front wheels already steered; square them to the body so 0 deg really is straight
-      o.updateMatrixWorld(true); const aC = new THREE.Vector3(1, 0, 0).transformDirection(o.matrixWorld).transformDirection(invCar);
+      o.updateMatrixWorld(true);
+      // the axle is whichever local axis lies closest to the car's side-to-side axis (Blender wheels often use Y or Z)
+      const aC = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)].map(a => a.transformDirection(o.matrixWorld).transformDirection(invCar)).reduce((b, a) => Math.abs(a.x) > Math.abs(b.x) ? a : b);
       if (aC.x < 0) aC.negate(); const baked = Math.atan2(-aC.z, aC.x);
       if (Math.abs(baked) > 0.002) { const P0 = o.parent; P0.updateMatrixWorld(true);
         const upP = new THREE.Vector3(0, 1, 0).transformDirection(car.matrixWorld).transformDirection(new THREE.Matrix4().copy(P0.matrixWorld).invert()).normalize();
