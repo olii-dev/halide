@@ -20,6 +20,17 @@ export const LOCATIONS = [
   { id: 'potsdamer_platz', name: 'Potsdamer Platz', place: 'City crossing, Berlin', height: 1.7, u: 0.6, iconic: true },
   { id: 'quattro_canti', name: 'Quattro Canti', place: 'Baroque crossroads, Palermo', height: 1.7, u: 0.4, iconic: true },
   { id: 'venice_sunset', name: 'Venice', place: 'Waterfront, sunset', height: 1.7, u: 0.85, iconic: true },
+  { id: 'zwartkops_start_sunset', dust: '#8f8578', name: 'Zwartkops Grid', place: 'Start/finish straight, sunset', height: 1.7, u: 0.4, track: true },
+  { id: 'zwartkops_curve_sunset', dust: '#8f8578', name: 'Zwartkops Hairpin', place: 'Track curve, sunset', height: 1.7, u: 0.88, track: true },
+  { id: 'zwartkops_pit', name: 'Zwartkops Pit Lane', place: 'Covered pits, trackside', height: 1.7, u: 0.42, track: true },
+  { id: 'skidpan', name: 'Skidpan', place: 'Test pad, stormy sky', height: 1.7, u: 0.3, track: true },
+  { id: 'kart_club', name: 'Kart Club', place: 'Indoor kart track', height: 1.7, u: 0.52, track: true, sun: false },
+  { id: 'piazza_san_marco', name: 'Piazza San Marco', place: 'Venice, morning', height: 1.7, u: 0.5, iconic: true },
+  { id: 'st_peters_square_night', name: "St Peter's Square", place: 'Vatican City, night', height: 1.7, u: 0.27, sun: false, iconic: true },
+  { id: 'colosseum', name: 'Colosseum', place: 'Rome, afternoon', height: 1.7, u: 0.85, iconic: true },
+  { id: 'vatican_road', name: 'Vatican Road', place: 'Rome street, day', height: 1.7, u: 0.21, iconic: true },
+  { id: 'signal_hill_sunrise', name: 'Signal Hill', place: 'Mountain road, Cape Town, sunrise', height: 1.7, u: 0.995, iconic: true },
+  { id: 'shanghai_riverside', name: 'Pudong', place: 'Riverside, Shanghai, day', height: 1.7, u: 0.1, iconic: true },
 ];
 export function bearingFromU(u) { const t = (u - 0.5) * 2 * Math.PI; return Math.atan2(-Math.cos(t), -Math.sin(t)); }
 export const MAX_FOCAL = 135; // mm; past this an 8k panorama backdrop visibly softens
