@@ -8,7 +8,7 @@ const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.
 
 // GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
 export function buildUI(api) {
-  const { setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
+  const { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
@@ -244,6 +244,7 @@ export function buildUI(api) {
     try {
       const mobile = matchMedia('(max-width: 820px)').matches;
       const edge = +new URLSearchParams(location.search).get('ex') || (mobile ? 2560 : 3840); // ex= only for testing
+      const setup = snapshotScene();
       const { blob, w, h } = await exportPhoto(edge);
       const L = LOCATIONS.find(l => l.id === state.loc);
       shot = { url: URL.createObjectURL(blob), w, h, name: fileName() };
@@ -253,7 +254,7 @@ export function buildUI(api) {
       bits.push(`1/${state.shutter}s`); if (state.speed > 0) bits.push(`${state.speed} km/h`); if (state.look !== 'none') bits.push(LOOKS[state.look].name);
       bits.push(`${w}×${h}`);
       reveal.querySelector('.exif').textContent = bits.join('  ·  ');
-      saveShot({ blob, w, h, name: shot.name, where: `${L.name} · ${L.place}`, exif: bits.join('  ·  ') }).then(() => { toast('Kept in your gallery'); refreshCount(); }).catch(e => console.warn('gallery', e));
+      saveShot({ blob, w, h, scene: setup, name: shot.name, where: `${L.name} · ${L.place}`, exif: bits.join('  ·  ') }).then(() => { toast('Kept in your gallery'); refreshCount(); }).catch(e => console.warn('gallery', e));
       document.body.classList.remove('developing');
       reveal.setAttribute('aria-hidden', 'false'); void reveal.offsetWidth; reveal.classList.add('show');
     } catch (e) { console.error(e); document.body.classList.remove('developing'); toast('Could not develop the photo on this device'); }
@@ -279,10 +280,18 @@ export function buildUI(api) {
   function openShot(sh) {
     viewing = { ...sh, url: URL.createObjectURL(sh.blob) }; vimg.src = viewing.url;
     viewer.querySelector('.where').innerHTML = `<b>HALIDE</b>${sh.where}`; viewer.querySelector('.exif').textContent = sh.exif || `${sh.w}×${sh.h}`;
-    viewer.classList.add('show');
+    viewer.querySelector('.v-edit').hidden = !sh.scene; viewer.classList.add('show');
   }
   function closeShot() { viewer.classList.remove('show'); const v = viewing; viewing = null; if (v) setTimeout(() => URL.revokeObjectURL(v.url), 500); }
   viewer.querySelector('.v-back').onclick = closeShot;
+  // reopen the photo's exact setup (place, cars, paint, camera, effects). Shooting again keeps the original and adds a new photo.
+  viewer.querySelector('.v-edit').onclick = async () => {
+    if (!viewing?.scene) return; const snap = viewing.scene, L = LOCATIONS.find(l => l.id === snap.state.loc);
+    closeShot(); closeGallery(); document.body.classList.remove('in-menu'); document.body.classList.add('scene-loading'); $('#sceneLoad').textContent = `Loading ${L?.name ?? 'setup'}…`;
+    try { await restoreScene(snap); toast('Setup reopened. Shoot again to add a new photo'); }
+    catch (e) { console.error(e); toast('Could not reopen that setup'); }
+    document.body.classList.remove('scene-loading'); showScene(); syncAll();
+  };
   viewer.querySelector('.v-save').onclick = () => viewing && saveBlobAs(viewing.url, viewing.name, viewing.w, viewing.h);
   viewer.querySelector('.v-del').onclick = async () => { if (!viewing || !confirm('Delete this photo from the gallery?')) return; await deleteShot(viewing.id); closeShot(); openGallery(); refreshCount(); };
   for (const b of document.querySelectorAll('.galleryBtn')) b.onclick = openGallery;

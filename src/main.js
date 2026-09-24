@@ -251,6 +251,19 @@ export function removeCar(c = active) {
   if (!cars.some(x => x.ground.catcher.material.userData.uniforms.useSun.value)) cars[0].ground.catcher.material.userData.uniforms.useSun.value = 1;
   active = cars[Math.min(i, cars.length - 1)]; renderer.shadowMap.needsUpdate = true; markDirty();
 }
+// gallery: every photo keeps the exact setup it was shot with, so it can be reopened and reshot
+export function snapshotScene() { return { v: 1, state: { ...state }, rig: { ...rig }, cars: cars.map(c => ({ ...c.s })), active: cars.indexOf(active) }; }
+export async function restoreScene(snap) {
+  if (!snap?.cars?.length) return false;
+  if (state.loc !== snap.state.loc) await setLocation(snap.state.loc, { keepCar: true });
+  for (const m of new Set(snap.cars.map(s => s.model))) if (!templates[m]?.ready) { const t = await loadTemplate(m).catch(() => null); if (t) templates[m].ready = t; }
+  for (const c of cars.splice(0)) { scene.remove(c.holder); c.ground.dispose(); }
+  active = null; snap.cars.slice(0, MAX_CARS).forEach(s => addCar({ ...s }));
+  active = cars[snap.active] || cars[0];
+  Object.assign(state, snap.state); Object.assign(rig, snap.rig); camera.setFocalLength(state.focal);
+  rebake(); renderer.shadowMap.needsUpdate = true; markDirty(); ui?.sync();
+  return true;
+}
 export function selectCar(i) { if (cars[i]) { active = cars[i]; markDirty(); } }
 export function activeIndex() { return cars.indexOf(active); }
 
@@ -463,7 +476,7 @@ await Promise.all([setLocation(state.loc), loadTemplate('concept').then(t => { t
 if (q.get('car') && q.get('car') !== 'concept') { const t = await loadTemplate(q.get('car')).catch(() => null); if (t) templates[q.get('car')].ready = t; }
 addCar(q.get('car') && templates[q.get('car')]?.ready ? { ...defaultCar(), model: q.get('car') } : null);
 resize(); frame();
-ui = buildUI({ setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
+ui = buildUI({ snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
 function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
@@ -486,5 +499,5 @@ let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() =>
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
+window.halide = { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);
