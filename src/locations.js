@@ -31,6 +31,16 @@ export const LOCATIONS = [
   { id: 'vatican_road', name: 'Vatican Road', place: 'Rome street, day', height: 1.7, u: 0.21, iconic: true },
   { id: 'signal_hill_sunrise', name: 'Signal Hill', place: 'Mountain road, Cape Town, sunrise', height: 1.7, u: 0.995, iconic: true },
   { id: 'shanghai_riverside', name: 'Pudong', place: 'Riverside, Shanghai, day', height: 1.7, u: 0.1, iconic: true },
+  // backplates: flat photos of famous circuits (Wikimedia Commons, credited). light = the Poly Haven HDRI that lights the car,
+  // u = which way the camera faces inside that HDRI (sets where the sun comes from), f35 = 35mm-equivalent lens,
+  // hz = horizon row in the photo (0 top .. 1 bottom), camH = camera height (m)
+  { id: 'monza_straight', plate: true, track: true, name: 'Monza', place: 'Main straight, Autodromo Nazionale', light: 'zwartkops_straight_afternoon', u: 0.31, f35: 160, hz: 0.4, camH: 1.6, height: 1.7, credit: 'Photo: United Autosports, CC BY-SA 2.0, via Wikimedia Commons' },
+  { id: 'spa_a', plate: true, track: true, name: 'Spa-Francorchamps', place: 'La Source, Belgium', light: 'skidpan', u: 0.3, f35: 29, hz: 0.48, camH: 1.5, near: 11, lat: 0, height: 1.7, credit: 'Photo: FrDr, CC BY-SA 4.0, via Wikimedia Commons' },
+  { id: 'monaco_pits', plate: true, track: true, name: 'Monaco', place: 'Pit lane, Circuit de Monaco', light: 'zwartkops_straight_afternoon', u: 0.31, f35: 29, hz: 0.53, camH: 1.5, near: 10, lat: -1, height: 1.7, credit: 'Photo: Alexander Migl, CC BY-SA 4.0, via Wikimedia Commons' },
+  { id: 'bathurst_a', plate: true, track: true, name: 'Mount Panorama', place: 'Bathurst, NSW', light: 'zwartkops_straight_afternoon', u: 0.31, f35: 24, hz: 0.62, camH: 1.5, near: 10, lat: 3, height: 1.7, credit: 'Photo: FotoSleuth, CC BY 2.0, via Wikimedia Commons' },
+  { id: 'suzuka_pits', plate: true, track: true, name: 'Suzuka', place: 'Pit straight, Japan', light: 'skidpan', u: 0.3, f35: 28, hz: 0.5, camH: 1.5, near: 11, lat: 0, height: 1.7, credit: 'Photo: Mamusi Taka, CC BY-SA 3.0, via Wikimedia Commons' },
+  { id: 'suzuka_t1', plate: true, track: true, name: 'Suzuka Turn 1', place: 'First corner, Japan', light: 'skidpan', u: 0.3, f35: 28, hz: 0.3, camH: 1.5, near: 11, lat: 0, height: 1.7, credit: 'Photo: Mamusi Taka, CC BY-SA 3.0, via Wikimedia Commons' },
+  { id: 'suzuka_12', plate: true, track: true, name: 'Suzuka Esses', place: 'Trackside, Japan', light: 'skidpan', u: 0.3, f35: 28, hz: 0.52, camH: 1.5, near: 11, lat: 0, height: 1.7, credit: 'Photo: Mamusi Taka, CC BY-SA 3.0, via Wikimedia Commons' },
 ];
 export function bearingFromU(u) { const t = (u - 0.5) * 2 * Math.PI; return Math.atan2(-Math.cos(t), -Math.sin(t)); }
 export const MAX_FOCAL = 135; // mm; past this an 8k panorama backdrop visibly softens

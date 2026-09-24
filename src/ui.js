@@ -24,7 +24,7 @@ export function buildUI(api) {
     };
     grid.appendChild(c);
   }
-  function showScene() { const L = LOCATIONS.find(l => l.id === state.loc); $('#sceneName').innerHTML = `<b>${L.name}</b> ${L.place}`; }
+  function showScene() { const L = LOCATIONS.find(l => l.id === state.loc); $('#sceneName').innerHTML = `<b>${L.name}</b> ${L.place}${L.credit ? ` <small class="credit">${L.credit}</small>` : ''}`; }
   showScene();
   $('#scenesBtn').onclick = () => { for (const c of grid.children) c.classList.toggle('cur', c.dataset.id === state.loc); document.body.classList.add('in-menu'); };
   if (!new URLSearchParams(location.search).has('loc')) document.body.classList.add('in-menu');
@@ -274,12 +274,12 @@ export function buildUI(api) {
       const L = LOCATIONS.find(l => l.id === state.loc);
       shot = { url: URL.createObjectURL(blob), w, h, name: fileName() };
       img.src = shot.url; await img.decode().catch(() => {});
-      reveal.querySelector('.where').innerHTML = `<b>HALIDE</b>${L.name} · ${L.place}`;
+      reveal.querySelector('.where').innerHTML = `<b>HALIDE</b>${L.name} · ${L.place}${L.credit ? ` · ${L.credit}` : ''}`;
       const bits = [`${Math.round(state.focal)}mm`, `f/${state.fstop}`, `${state.ev >= 0 ? '+' : ''}${state.ev.toFixed(1)} EV`];
       bits.push(`1/${state.shutter}s`); if (state.speed > 0) bits.push(`${state.speed} km/h`); if (state.look !== 'none') bits.push(LOOKS[state.look].name);
       bits.push(`${w}×${h}`);
       reveal.querySelector('.exif').textContent = bits.join('  ·  ');
-      saveShot({ blob, w, h, scene: setup, name: shot.name, where: `${L.name} · ${L.place}`, exif: bits.join('  ·  ') }).then(() => { toast('Kept in your gallery'); refreshCount(); }).catch(e => console.warn('gallery', e));
+      saveShot({ blob, w, h, scene: setup, name: shot.name, where: `${L.name} · ${L.place}${L.credit ? ` · ${L.credit}` : ''}`, exif: bits.join('  ·  ') }).then(() => { toast('Kept in your gallery'); refreshCount(); }).catch(e => console.warn('gallery', e));
       document.body.classList.remove('developing');
       reveal.setAttribute('aria-hidden', 'false'); void reveal.offsetWidth; reveal.classList.add('show');
     } catch (e) { console.error(e); document.body.classList.remove('developing'); toast('Could not develop the photo on this device'); }

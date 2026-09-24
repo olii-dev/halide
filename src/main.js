@@ -58,6 +58,36 @@ function setShadowSize(n) { if (sun.shadow.mapSize.x === n) return; sun.shadow.m
 let sunShare = 0.6;
 const backdropMeta = fetch(`${BASE}assets/backdrop/backdrops.json`).then(r => r.json()).catch(() => ({}));
 let sky = null, template = null, carRadius = 3;
+// Backplates: a flat photo of a real place (famous circuits) drawn behind everything. The camera is locked to the
+// photo's own lens and horizon; a similar-weather HDRI lights the car and its shadow falls on the photographed road.
+// the photo is already tone-mapped: run it back through an inverse of the AgX curve (grey axis) so that after the
+// normal pipeline (exposure, AgX, grade) it shows as shot, and the EV slider still works on it
+const invAgX = (() => {
+  const N = 1024, lut = new Float32Array(N * 4), minEv = -12.47393, maxEv = 4.026069;
+  const fwd = x => { let t = (Math.log2(Math.max(x, 1e-10)) - minEv) / (maxEv - minEv); t = Math.min(Math.max(t, 0), 1);
+    const t2 = t * t, t4 = t2 * t2; let y = 15.5 * t4 * t2 - 40.14 * t4 * t + 31.96 * t4 - 6.868 * t2 * t + 0.4298 * t2 + 0.1191 * t - 0.00232;
+    y = Math.min(Math.max(Math.pow(Math.max(y, 0), 2.2), 0), 1); return y <= 0.0031308 ? y * 12.92 : 1.055 * Math.pow(y, 1 / 2.4) - 0.055; };
+  for (let i = 0; i < N; i++) { const v = Math.min(i / (N - 1), 0.985); let lo = -14, hi = 5;
+    for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (fwd(2 ** m) < v) lo = m; else hi = m; } lut[i * 4] = 2 ** ((lo + hi) / 2); }
+  const t = new THREE.DataTexture(lut, N, 1, THREE.RGBAFormat, THREE.FloatType); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t;
+})();
+const plate = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: { map: { value: null }, lut: { value: invAgX }, white: { value: 1 }, sat: { value: 1.25 }, uvS: { value: new THREE.Vector2(1, 1) } },
+  vertexShader: `uniform vec2 uvS; varying vec2 vUv; void main(){ vUv = 0.5 + (uv - 0.5) * uvS; gl_Position = vec4(position.xy, 0.99999, 1.); }`,
+  fragmentShader: `uniform sampler2D map, lut; uniform float white, sat; varying vec2 vUv;
+    float inv(float v){ return texture2D(lut, vec2(v * (1023.0 / 1024.0) + 0.5 / 1024.0, 0.5)).r; }
+    void main(){ vec3 v = texture2D(map, vUv).rgb; vec3 c = vec3(inv(v.r), inv(v.g), inv(v.b));
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = max(mix(vec3(l), c, sat), 0.0); gl_FragColor = vec4(c * white, 1.); }`,
+  depthWrite: false, depthTest: false,
+}));
+plate.frustumCulled = false; plate.renderOrder = -2; plate.visible = false; scene.add(plate);
+const plateView = L => { // full-photo vertical fov, the screen's share of it (cover fit) and the pitch that puts the horizon where the photo has it
+  const img = plate.material.uniforms.map.value?.image, a = img ? img.width / img.height : 1.5, sA = VW() / VH();
+  const vfov = 2 * Math.atan(43.27 / Math.sqrt(1 + a * a) / 2 / L.f35);
+  plate.material.uniforms.uvS.value.set(sA > a ? 1 : sA / a, sA > a ? a / sA : 1);
+  const svfov = sA > a ? 2 * Math.atan(Math.tan(vfov / 2) * a / sA) : vfov;
+  return { svfov, pitch: -Math.atan((0.5 - L.hz) * 2 * Math.tan(vfov / 2)) };
+};
 
 // new scene = clean slate: every camera/effects setting and car placement back to defaults (paint and car count kept)
 export function resetScene() {
@@ -68,15 +98,16 @@ export function resetScene() {
 export async function setLocation(id, { keepCar = false } = {}) {
   const L = LOCATIONS.find(l => l.id === id) || LOCATIONS[0];
   state.loc = L.id; dustColor.value.set(L.dust || '#8f877c');
-  const hdr = await loadHDR(`${BASE}assets/hdri/${L.id}_2k.hdr`);
+  const hdr = await loadHDR(`${BASE}assets/hdri/${L.light || L.id}_2k.hdr`);
   if (state.loc !== L.id) return;
   const info = analyse(hdr, { noSun: L.sun === false });
   const envRT = pmrem.fromEquirectangular(info.envTex); info.envTex.dispose();
   const oldEnv = scene.environment; scene.environment = envRT.texture; oldEnv?.dispose?.();
   if (sky) { scene.remove(sky); sky.geometry.dispose(); sky.material.map?.dispose(); }
-  sky = new GroundedSkybox(hdr, L.height, 400, 256);
-  sky.material.depthWrite = true; sky.renderOrder = -1; sky.position.y = L.height;
-  scene.add(sky); renderer.shadowMap.needsUpdate = true; markDirty();
+  sky = null; plate.visible = false;
+  if (L.plate) hdr.dispose();
+  else { sky = new GroundedSkybox(hdr, L.height, 400, 256); sky.material.depthWrite = true; sky.renderOrder = -1; sky.position.y = L.height; scene.add(sky); }
+  renderer.shadowMap.needsUpdate = true; markDirty();
   sun.visible = info.hasSun; sun.shadow.radius = 10 * (L.soft ?? 1); sun.shadow.blurSamples = L.soft ? 32 : 20;
   sun.color.setRGB(info.sunColor.x, info.sunColor.y, info.sunColor.z, THREE.LinearSRGBColorSpace);
   sun.intensity = info.sunIntensity; sunDir.copy(info.sunDir);
@@ -94,6 +125,15 @@ export async function setLocation(id, { keepCar = false } = {}) {
   console.log('env', JSON.stringify(window.__env));
   window.__hi = false;
   // sharp backdrop: 8k LDR photo (4k on small GPUs / phones), HDR still lights the car
+  if (L.plate) {
+    Promise.all([backdropMeta, new THREE.TextureLoader().loadAsync(`${BASE}assets/plate/${L.id}.jpg`)]).then(([meta, tex]) => {
+      if (state.loc !== L.id) { tex.dispose(); return; }
+      tex.colorSpace = THREE.NoColorSpace; tex.generateMipmaps = true; tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); // raw display values: inverted in the shader
+      const u = plate.material.uniforms; u.map.value?.dispose(); u.map.value = tex; u.white.value = L.expo ?? 1;
+      plate.visible = true; { const v = plateView(L); camera.fov = THREE.MathUtils.radToDeg(v.svfov); camera.updateProjectionMatrix(); state.focal = +camera.getFocalLength().toFixed(1); } if (active) frame(); window.__hi = true; markDirty();
+    });
+    return;
+  }
   const big = renderer.capabilities.maxTextureSize >= 8192 && !matchMedia('(max-width: 820px)').matches;
   if (!q.has('lo')) Promise.all([backdropMeta, new THREE.TextureLoader().loadAsync(`${BASE}assets/backdrop/${L.id}_${big ? '8k' : '4k'}.jpg`)]).then(([meta, tex]) => {
     if (!(sky && state.loc === L.id)) { tex.dispose(); return; }
@@ -386,6 +426,7 @@ function frame() {
   const hfov = 2 * Math.atan(Math.tan(vfov / 2) * VW() / VH());
   carS.near = +(q.get('dist') ?? ((active?.model.userData.radius ?? carRadius) * (VW() < VH() ? 1.15 : 0.95) / Math.tan(Math.min(vfov, hfov) / 2)));
   if (q.has('yaw')) carS.rot = +q.get('yaw');
+  const L = LOCATIONS.find(l => l.id === state.loc); if (L?.plate) { if (L.near) carS.near = L.near; if (L.lat != null) carS.lat = L.lat; } // backplates: a spot on the photographed road
 }
 
 export function setFocal(mm, { dolly = state.dollyZoom } = {}) {
@@ -424,10 +465,17 @@ function applyRig() {
     applySteer(c); c.ground.setCarTransform(c.holder); box.expandByPoint(new THREE.Vector2(P.x, P.z));
   }
   computeCar(); const cx = carPos.x, cz = carPos.z;
+  if (L.plate) { // locked to the photo's lens, height and horizon
+    const v = plateView(L); rig.camH = L.camH; camera.position.set(0, L.camH, 0);
+    const fov = THREE.MathUtils.radToDeg(v.svfov); if (Math.abs(camera.fov - fov) > 1e-4) { camera.fov = fov; camera.updateProjectionMatrix(); state.focal = +camera.getFocalLength().toFixed(1); }
+    camera.rotation.set(v.pitch, rig.base, 0, 'YXZ');
+    if (state.focusMode === 'car') state.focus = carDistance();
+  } else {
   camera.position.set(0, rig.camH, 0);
   const autoPitch = Math.atan2(rig.aimY - rig.camH, Math.hypot(cx, cz));
   camera.rotation.set(autoPitch + THREE.MathUtils.degToRad(rig.tilt), rig.base + THREE.MathUtils.degToRad(rig.pan), THREE.MathUtils.degToRad(rig.roll), 'YXZ');
   if (state.focusMode === 'car') state.focus = carDistance();
+  }
   // sun shadow covers every car
   const ctr = box.getCenter(new THREE.Vector2()), ext = Math.ceil(box.getSize(new THREE.Vector2()).length() / 2 + 6);
   sun.target.position.set(ctr.x, 0, ctr.y); sun.position.set(ctr.x, 0, ctr.y).addScaledVector(sunDir, 20 + ext);
