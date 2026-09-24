@@ -31,6 +31,7 @@ export const state = {
   bloom: 1, contrast: 1, saturation: 1, temp: 0, tint: 0, look: 'none', panBlur: false, aspect: 'free', grid: 'off', dragMode: 'off', dollyZoom: false,
 };
 camera.setFocalLength(state.focal);
+const STATE0 = { ...state }, CAMH0 = +(q.get('h') ?? 1.1);
 // camera sits where the panorama was shot; the scene axis (base) is where the car goes
 export const rig = { camH: +(q.get('h') ?? 1.1), pan: 0, tilt: 0, roll: 0, sceneAngle: 0, base: 0, aimY: 0.6 };
 // the car: position in metres along the scene axis, heading relative to the camera (0 = nose to camera)
@@ -54,6 +55,12 @@ let sunShare = 0.6;
 const backdropMeta = fetch(`${BASE}assets/backdrop/backdrops.json`).then(r => r.json()).catch(() => ({}));
 let sky = null, template = null, carRadius = 3;
 
+// new scene = clean slate: every camera/effects setting and car placement back to defaults (paint and car count kept)
+export function resetScene() {
+  const loc = state.loc; Object.assign(state, STATE0, { loc }); rig.camH = CAMH0; camera.setFocalLength(state.focal);
+  const d = defaultCar(); cars.forEach((c, i) => { Object.assign(c.s, { lat: i ? (i % 2 ? 3.2 : -3.2) * Math.ceil(i / 2) : 0, near: d.near, rot: d.rot, steer: 0, brake: false }); });
+  rebake(); renderer.shadowMap.needsUpdate = true; markDirty();
+}
 export async function setLocation(id, { keepCar = false } = {}) {
   const L = LOCATIONS.find(l => l.id === id) || LOCATIONS[0];
   state.loc = L.id;
@@ -70,7 +77,7 @@ export async function setLocation(id, { keepCar = false } = {}) {
   sun.color.setRGB(info.sunColor.x, info.sunColor.y, info.sunColor.z, THREE.LinearSRGBColorSpace);
   sun.intensity = info.sunIntensity; sunDir.copy(info.sunDir);
   sunShare = info.sunShare; for (const c of cars) c.ground.sunShare = sunShare;
-  rig.base0 = bearingFromU(L.u); if (!keepCar) { rig.sceneAngle = 0; rig.pan = 0; rig.tilt = 0; rig.roll = 0; if (active) { carS.lat = 0; frame(); } }
+  rig.base0 = bearingFromU(L.u); if (!keepCar) { rig.sceneAngle = 0; rig.pan = 0; rig.tilt = 0; rig.roll = 0; if (active) frame(); }
   window.__env = { id: L.id, hasSun: info.hasSun, sunShare: +info.sunShare.toFixed(3), sunDir: info.sunDir.toArray().map(v => +v.toFixed(3)), sunI: +info.sunIntensity.toFixed(1), skyE: +info.skyLum.toFixed(1), groundL: +info.groundL.toFixed(3),
     impliedAlbedo: +(Math.PI * info.groundL / (info.sunIntensity * Math.max(info.sunDir.y, 0) + info.skyLum)).toFixed(3) };
   console.log('env', JSON.stringify(window.__env));
@@ -351,7 +358,7 @@ let ui = null;
 await Promise.all([setLocation(state.loc), loadTemplate()]);
 addCar();
 resize(); frame();
-ui = buildUI({ state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
+ui = buildUI({ resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
 function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
@@ -374,5 +381,5 @@ let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() =>
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
+window.halide = { resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);

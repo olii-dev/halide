@@ -8,19 +8,25 @@ const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.
 
 // GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
 export function buildUI(api) {
-  const { state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
+  const { resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
   for (const L of LOCATIONS) {
     const c = document.createElement('button'); c.className = 'card'; c.dataset.id = L.id;
     c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg"><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
-    c.onclick = async () => { document.body.classList.remove('in-menu'); if (state.loc !== L.id) { await setLocation(L.id); } showScene(); syncAll(); };
+    c.onclick = async () => {
+      // hide the old scene while the new one loads, so a slow phone never shows the previous place under the new name
+      document.body.classList.remove('in-menu'); document.body.classList.add('scene-loading'); $('#sceneLoad').textContent = `Loading ${L.name}…`;
+      const want = L.id; state.loc = want; resetScene(); showScene();
+      try { await setLocation(want); } finally { if (state.loc === want) { await new Promise(r => { const t0 = performance.now(); (function w() { if (window.__hi || performance.now() - t0 > 8000 || state.loc !== want) r(); else setTimeout(w, 100); })(); }); } }
+      if (state.loc === want) document.body.classList.remove('scene-loading'); showScene(); syncAll();
+    };
     grid.appendChild(c);
   }
   function showScene() { const L = LOCATIONS.find(l => l.id === state.loc); $('#sceneName').innerHTML = `<b>${L.name}</b> ${L.place}`; }
   showScene();
-  $('#scenesBtn').onclick = () => document.body.classList.add('in-menu');
+  $('#scenesBtn').onclick = () => { for (const c of grid.children) c.classList.toggle('cur', c.dataset.id === state.loc); document.body.classList.add('in-menu'); };
   if (!new URLSearchParams(location.search).has('loc')) document.body.classList.add('in-menu');
 
   // ---------- control builders ----------
