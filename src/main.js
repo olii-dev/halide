@@ -28,7 +28,7 @@ camera.filmGauge = 36;
 export const state = {
   focal: Math.min(+(q.get('f') ?? 50), MAX_FOCAL), fstop: +(q.get('n') ?? 2.8), ev: +(q.get('ev') ?? 0), grain: +(q.get('grain') ?? 0.3), speed: +(q.get('kmh') ?? 0), previewSamples: +(q.get('ps') ?? 6),
   shutter: 60, vignette: 0.3, focus: 8, focusMode: 'car', dof: q.get('dof') !== '0', loc: q.get('loc') ?? LOCATIONS[0].id,
-  bloom: 1, contrast: 1, saturation: 1, temp: 0, tint: 0, look: 'none', aspect: 'free', grid: 'off', dragMode: 'off', dollyZoom: false,
+  bloom: 1, contrast: 1, saturation: 1, temp: 0, tint: 0, look: 'none', panBlur: false, aspect: 'free', grid: 'off', dragMode: 'off', dollyZoom: false,
 };
 camera.setFocalLength(state.focal);
 // camera sits where the panorama was shot; the scene axis (base) is where the car goes
@@ -128,7 +128,7 @@ export function addCar(s = null) {
     ground: new Ground(renderer, scene, { useSun: cars.length === 0 }) };
   c.ground.sunShare = sunShare;
   model.traverse(o => {
-    if (!o.isMesh) return; const n = o.material.name || '';
+    if (!o.isMesh) return; o.layers.enable(1); const n = o.material.name || '';
     if (/^Paint 1/.test(n)) c.paintSlots.push({ mesh: o, original: o.material });
     if (n === 'Headlight') { o.material = o.material.clone(); c.lightMats.head.push(o.material); }
     if (n === 'Brakelight') { o.material = o.material.clone(); c.lightMats.tail.push(o.material); }
@@ -210,6 +210,18 @@ export function carDistance() { computeCar(); return Math.hypot(carPos.x, rig.ca
 export function frameCar() { // aim the camera straight at the car
   computeCar(); const toCar = Math.atan2(-carPos.x, -carPos.z); let d = THREE.MathUtils.radToDeg(toCar - rig.base); d = ((d + 540) % 360) - 180; rig.pan = +d.toFixed(1); rig.tilt = 0;
 }
+// panning-shot blur vector (uv units): background moves at v/d rad/s across the frame during the shutter
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), panVec = new THREE.Vector2();
+function panBlur(W, H) {
+  if (!state.panBlur || !(state.speed > 0) || !active) return null;
+  const hdg = active.holder.rotation.y; _a.copy(active.holder.position).setY(0.6);
+  _b.set(Math.sin(hdg) * active.noseSign, 0, Math.cos(hdg) * active.noseSign).add(_a);
+  _a.project(camera); _b.project(camera);
+  let dx = (_b.x - _a.x) * W / 2, dy = (_b.y - _a.y) * H / 2; const n = Math.hypot(dx, dy); if (n < 1e-6) return null; dx /= n; dy /= n;
+  const d = Math.max(2, active.holder.position.distanceTo(camera.position)), fpx = camera.getFocalLength() / camera.getFilmHeight() * H;
+  const L = Math.min(0.3 * W, (state.speed / 3.6) / d / state.shutter * fpx);
+  return panVec.set(dx * L / W, dy * L / H);
+}
 function applyRig() {
   const L = LOCATIONS.find(l => l.id === state.loc); rig.camH = THREE.MathUtils.clamp(rig.camH, 0.25, L.height);
   const P = new THREE.Vector3(), box = new THREE.Box2();
@@ -253,7 +265,7 @@ export async function exportPhoto(longEdge = 3840) {
   const [pw, ph] = [post.w, post.h];
   if (state.aspect !== 'free') camera.setViewOffset(VW(), VH(), cr.x, cr.y, cr.w, cr.h);
   post.setSize(w, h); setShadowSize(SM_EXPORT); applyRig(); renderer.shadowMap.needsUpdate = true;
-  post.render(scene, camera, { ...state, sensorScale: cr.h / VH(), quality: 'export', animateGrain: false, subframe: state.speed > 0 ? subframe : null }, out);
+  post.render(scene, camera, { ...state, pan: panBlur(w, h), sensorScale: cr.h / VH(), quality: 'export', animateGrain: false, subframe: state.speed > 0 ? subframe : null }, out);
   camera.clearViewOffset();
   const px = new Uint8Array(w * h * 4); renderer.readRenderTargetPixels(out, 0, 0, w, h, px);
   out.dispose(); post.setSize(pw, ph); setShadowSize(SM_PREVIEW); renderer.shadowMap.needsUpdate = true; markDirty(); hiDone = false;
@@ -333,7 +345,7 @@ function loop(now) {
     if (PERF) { renderer.getContext().finish(); PERF.lo.push(performance.now() - t0); }
   } else if (!hiDone && !(drag && drag.moved) && now - lastChange > 450) {
     hiDone = true; applyRig();
-    const t0 = performance.now(); post.render(scene, camera, { ...state, animateGrain: false, subframe: state.speed > 0 ? subframe : null });
+    const t0 = performance.now(); post.render(scene, camera, { ...state, pan: panBlur(post.w, post.h), animateGrain: false, subframe: state.speed > 0 ? subframe : null });
     if (PERF) { renderer.getContext().finish(); PERF.hi.push(performance.now() - t0); }
   }
 }

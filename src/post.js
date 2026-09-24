@@ -54,6 +54,18 @@ void main(){ vec3 s = texture2D(tMap, vUv).rgb * 4.;
   s += texture2D(tMap, vUv + px*vec2(-1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(-1.,1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,1.)).rgb;
   gl_FragColor = vec4(s / 16. + texture2D(tPrev, vUv).rgb, 1.); }`;
 
+// panning shot: the camera tracks the car, so everything that is not a car streaks along the car's path
+const panFS = `uniform sampler2D tColor, tMask; uniform vec2 dir; varying vec2 vUv;
+void main(){
+  vec3 c = texture2D(tColor, vUv).rgb; float m = texture2D(tMask, vUv).r;
+  if (m > 0.995) { gl_FragColor = vec4(c, 1.); return; }
+  vec3 acc = vec3(0.); float w = 0.;
+  for (int i = 0; i < 64; i++) { float t = float(i) / 63.0 - 0.5; vec2 uv = clamp(vUv + dir * t, 0.001, 0.999);
+    float ww = (1.0 - texture2D(tMask, uv).r) * (1.0 - 1.4 * t * t); acc += texture2D(tColor, uv).rgb * ww; w += ww; }
+  vec3 bg = w > 0.01 ? acc / w : c;
+  gl_FragColor = vec4(mix(bg, c, m), 1.);
+}`;
+
 const finalFS = `
 uniform sampler2D tBloom; uniform float bloom;
 uniform sampler2D tColor; uniform float exposure, grain, vignette, time, contrast, saturation, lookSat, lookLift, lookMono; uniform vec2 res; uniform vec3 wb, lookMul, monoTint;
@@ -101,6 +113,8 @@ export class Post {
     this.copy = new THREE.ShaderMaterial({ vertexShader: vs, uniforms: { tMap: { value: null }, w: { value: 1 } },
       fragmentShader: `uniform sampler2D tMap; uniform float w; varying vec2 vUv; void main(){ gl_FragColor = vec4(texture2D(tMap, vUv).rgb * w, 1.); }`,
       blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true });
+    this.pan = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: panFS, uniforms: { tColor: { value: null }, tMask: { value: null }, dir: { value: new THREE.Vector2() } } });
+    this.maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
     this.quad = new FullScreenQuad(this.dof);
     this.setSize(1, 1);
   }
@@ -110,6 +124,8 @@ export class Post {
     this.rtScene = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4,
       depthTexture: new THREE.DepthTexture(w, h, THREE.FloatType) });
     this.rtDof = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
+    this.rtPan?.dispose(); this.rtPan = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
+    this.rtMask?.dispose(); this.rtMask = new THREE.WebGLRenderTarget(w, h);
     this.rtAccum?.dispose(); this.rtAccum = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
     this.mips?.forEach(m => { m.d.dispose(); m.u.dispose(); }); this.mips = [];
     let mw = w, mh = h; for (let i = 0; i < 6; i++) { mw = Math.max(1, mw >> 1); mh = Math.max(1, mh >> 1);
@@ -145,7 +161,17 @@ export class Post {
     u.radScale.value = opts.quality === 'export' ? Math.max(0.4, u.maxCoC.value * u.maxCoC.value / 3600) : Math.max(1.4 * this.h / 900, u.maxCoC.value * u.maxCoC.value / 700);
     this.quad.material = this.dof; r.setRenderTarget(this.rtDof); this.quad.render(r);
     // bloom: 6-level downsample / tent upsample chain on the linear HDR image
-    let src = this.rtDof.texture, sw = this.w, sh = this.h;
+    let colorTex = this.rtDof.texture;
+    if (opts.pan && (opts.pan.x || opts.pan.y)) {
+      // car mask: only layer 1 (car meshes), flat white
+      const ov = scene.overrideMaterial, mask = camera.layers.mask, pc = new THREE.Color(), pa = r.getClearAlpha(); r.getClearColor(pc);
+      scene.overrideMaterial = this.maskMat; camera.layers.set(1); r.setClearColor(0x000000, 1);
+      r.setRenderTarget(this.rtMask); r.clear(); r.render(scene, camera);
+      scene.overrideMaterial = ov; camera.layers.mask = mask; r.setClearColor(pc, pa);
+      this.pan.uniforms.tColor.value = colorTex; this.pan.uniforms.tMask.value = this.rtMask.texture; this.pan.uniforms.dir.value.copy(opts.pan);
+      this.quad.material = this.pan; r.setRenderTarget(this.rtPan); this.quad.render(r); colorTex = this.rtPan.texture;
+    }
+    let src = colorTex, sw = this.w, sh = this.h;
     this.quad.material = this.down;
     const mips = opts.bloomOff ? [] : this.mips;
     for (const m of mips) { this.down.uniforms.tMap.value = src; this.down.uniforms.px.value.set(0.5 / sw, 0.5 / sh); r.setRenderTarget(m.d); this.quad.render(r); src = m.d.texture; sw = m.w; sh = m.h; }
@@ -156,7 +182,7 @@ export class Post {
     f.contrast.value = opts.contrast ?? 1; f.saturation.value = opts.saturation ?? 1;
     const L = LOOKS[opts.look] || LOOKS.none; f.lookSat.value = L.sat; f.lookLift.value = L.lift; f.lookMono.value = L.mono; f.lookMul.value.fromArray(L.mul); f.monoTint.value.fromArray(L.tint);
     const t = opts.temp ?? 0, g = opts.tint ?? 0; f.wb.value.set(1 + 0.13 * t + 0.03 * g, 1 - 0.07 * g, 1 - 0.15 * t + 0.03 * g);
-    f.tColor.value = this.rtDof.texture; f.exposure.value = Math.pow(2, opts.ev); f.grain.value = opts.grain;
+    f.tColor.value = colorTex; f.exposure.value = Math.pow(2, opts.ev); f.grain.value = opts.grain;
     f.vignette.value = opts.vignette; f.time.value = opts.animateGrain ? (performance.now() % 1000) : 0;
     this.quad.material = this.final; r.setRenderTarget(target); this.quad.render(r);
   }

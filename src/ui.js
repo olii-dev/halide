@@ -127,7 +127,8 @@ export function buildUI(api) {
   toggle({ label: 'Depth of field', get: () => state.dof, set: v => { state.dof = v; } });
   section('camera', 'Exposure');
   slider({ label: 'Exposure', min: -3, max: 3, step: 0.1, nudge: 0.1, get: () => state.ev, set: v => { state.ev = Math.round(clamp(v, -3, 3) * 10) / 10; }, fmt: v => signed(v, 1, ' EV') });
-  seg({ label: 'Shutter speed', note: 'blurs spinning wheels', wrap: true, options: SHUTTERS.map(s => ({ id: String(s), name: `1/${s}` })), get: () => String(state.shutter), set: v => { state.shutter = +v; } });
+  toggle({ label: 'Panning shot', note: 'background streaks along the car’s path', off: 'Off', on: 'Pan with car', get: () => state.panBlur, set: v => { state.panBlur = v; if (v && !state.speed) { state.speed = 80; toast('Wheel spin set to 80 km/h'); } } });
+  seg({ label: 'Shutter speed', note: 'slower = more blur', wrap: true, options: SHUTTERS.map(s => ({ id: String(s), name: `1/${s}` })), get: () => String(state.shutter), set: v => { state.shutter = +v; } });
   section('camera', 'Camera position');
   const Lh = () => LOCATIONS.find(l => l.id === state.loc).height;
   slider({ label: 'Height', min: 0.25, max: 1.7, step: 0.01, nudge: 0.02, get: () => rig.camH, set: v => { rig.camH = clamp(v, 0.25, Lh()); }, fmt: v => `${v.toFixed(2)} m`, clamp: v => clamp(v, 0.25, Lh()) });
