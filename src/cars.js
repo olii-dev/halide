@@ -10,4 +10,6 @@ export const MODELS = [
     credit: '"[FREE] BMW M3 E30" by Martin Trafas, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/free-bmw-m3-e30-ac3c7013434e403e8faff87948caf422' },
   { id: 'nsx90', name: 'Honda NSX', year: 1990, file: 'nsx90.glb', tire: ['Material.011'], paint: ['Material.003'], hide: [], hideNodes: ['Plane_11', 'Plane.001_13'], length: 4.405, front: '+z',
     credit: '"Honda NSX 1990" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/honda-nsx-1990-1cc15628a00a4739a6b6c01128927c8d' },
+  { id: 'sl300', name: 'Mercedes-Benz 300 SL Gullwing', year: 1954, file: 'sl300.glb', tire: ['tire'], merged: ['chrome', 'mid-chrome', 'black'], paint: ['main_color'], hide: [], length: 4.52, front: '+z',
+    credit: '"Mercedes-Benz 300 SL Gullwing" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/mercedes-benz-300-sl-gullwing-505241c829c540a4921533000736904e' },
 ];

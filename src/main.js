@@ -148,7 +148,8 @@ function normaliseModel(src, cfg) {
   inner.position.x -= ctr.x; inner.position.z -= ctr.z; root.updateMatrixWorld(true); box = new THREE.Box3().setFromObject(root, true);
   const H = box.max.y - box.min.y;
   const corner = c => `Wheel${c.z > 0 ? 'Front' : 'Rear'}${c.x > 0 ? 'L' : 'R'}`;
-  if (cfg.spin) {
+  if (cfg.merged) splitMergedWheels(root, src, cfg, box, H, corner);
+  else if (cfg.spin) {
     // tyre, rim, disc and caliper are loose siblings in the source: gather each corner into one group.
     // spin parts go in as-is; fixed parts (calipers) get a BrakePad name so they steer but don't spin.
     const tyres = [], parts = [], isPart = n => cfg.tire.includes(n) || cfg.spin.includes(n) || (cfg.fixed || []).includes(n);
@@ -168,6 +169,41 @@ function normaliseModel(src, cfg) {
   const paint = new Set(cfg.paint);
   src.traverse(o => { if (o.isMesh && paint.has(o.material.name)) o.material.name = 'Paint 1'; });
   return root;
+}
+
+// some exports merge all four tyres (and the rims into other chrome) into one mesh per material.
+// Find the 4 wheel centres from the tyre vertices, then cut every triangle that sits inside a wheel's
+// cylinder out into that corner's own mesh, so the wheels can spin and steer like the others.
+function splitMergedWheels(root, src, cfg, box, H, corner) {
+  root.updateMatrixWorld(true);
+  const tyreMats = new Set(cfg.tire), partMats = new Set([...cfg.tire, ...cfg.merged]);
+  const meshes = []; src.traverse(o => { if (o.isMesh && partMats.has(o.material.name)) meshes.push(o); });
+  const v = new THREE.Vector3(), quads = {};
+  for (const m of meshes) { if (!tyreMats.has(m.material.name)) continue; const pos = m.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld); if (v.y > box.min.y + 0.45 * H) continue;
+      const k = (v.z > 0 ? 'F' : 'R') + (v.x > 0 ? 'L' : 'R'); (quads[k] ??= new THREE.Box3()).expandByPoint(v); } }
+  const wheels = Object.values(quads).map(b => { const c = b.getCenter(new THREE.Vector3()), sz = b.getSize(new THREE.Vector3());
+    const g = new THREE.Group(); g.name = corner(c); g.position.copy(c); root.add(g); return { c, r: Math.max(sz.y, sz.z) / 2 * 1.03, hw: sz.x / 2 + 0.03, g }; });
+  root.updateMatrixWorld(true);
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), cc = new THREE.Vector3();
+  for (const m of meshes) {
+    const geo = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone(), pos = geo.attributes.position, n = pos.count / 3;
+    const owner = new Int8Array(n).fill(-1);
+    for (let t = 0; t < n; t++) {
+      a.fromBufferAttribute(pos, 3 * t).applyMatrix4(m.matrixWorld); b.fromBufferAttribute(pos, 3 * t + 1).applyMatrix4(m.matrixWorld); cc.fromBufferAttribute(pos, 3 * t + 2).applyMatrix4(m.matrixWorld);
+      cc.add(a).add(b).multiplyScalar(1 / 3);
+      wheels.forEach((w, k) => { if (Math.abs(cc.x - w.c.x) < w.hw && Math.hypot(cc.y - w.c.y, cc.z - w.c.z) < w.r) owner[t] = k; });
+    }
+    const pick = k => { const out = new THREE.BufferGeometry();
+      for (const [name, attr] of Object.entries(geo.attributes)) { const sz = attr.itemSize, src2 = attr.array, dst = [];
+        for (let t = 0; t < n; t++) if (owner[t] === k) for (let j = 0; j < 3 * sz; j++) dst.push(src2[3 * t * sz + j]);
+        out.setAttribute(name, new THREE.BufferAttribute(new src2.constructor(dst), sz, attr.normalized)); }
+      return out; };
+    wheels.forEach((w, k) => { const g = pick(k); if (!g.attributes.position.count) return;
+      const part = new THREE.Mesh(g, m.material); part.matrix.copy(m.matrixWorld); part.matrix.decompose(part.position, part.quaternion, part.scale);
+      root.add(part); w.g.attach(part); });
+    const rest = pick(-1); m.geometry = rest;
+  }
 }
 
 // one car in the scene: its own model copy, paint, lights, wheels and contact shadow
