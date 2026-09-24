@@ -159,8 +159,9 @@ function buildWheels(c) {
   const car = c.model, wheels = c.wheels, steers = c.steers; car.updateMatrixWorld(true);
   const invCar = new THREE.Matrix4().copy(car.matrixWorld).invert(); let fz = 0, rz = 0;
   const axleW = new THREE.Vector3(1, 0, 0).transformDirection(car.matrixWorld);
-  car.traverse(o => {
-    if (!/^Wheel(Front|Rear)[LR]$/.test(o.name)) return;
+  // collect first: re-parenting inside traverse() shifts sibling indices and skips the next wheel
+  const found = []; car.traverse(o => { if (/^Wheel(Front|Rear)[LR]$/.test(o.name)) found.push(o); });
+  found.forEach(o => {
     const spin = o.children.filter(c => !/BrakePad/.test(c.name));
     const bb = new THREE.Box3(); spin.forEach(c => bb.union(new THREE.Box3().setFromObject(c, true)));
     const cW = bb.getCenter(new THREE.Vector3()), radius = (bb.max.y - bb.min.y) / 2;
@@ -278,7 +279,7 @@ export async function exportPhoto(longEdge = 3840) {
 }
 
 // canvas input: nothing moves by accident. Tap = focus there. Pinch / ctrl-scroll = zoom.
-// Dragging only does something when the user picks a drag mode (rotate or move) in the CAR tab.
+// Dragging ON a car moves it (grab-and-follow). Dragging elsewhere only does something when the user picks a drag mode in the CAR tab.
 // Keys: Q/E turn 15deg (shift 1deg), arrows nudge the car, [ ] zoom.
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 const el = renderer.domElement; const pointers = new Map(); let drag = null;
@@ -287,13 +288,33 @@ el.addEventListener('pointerdown', e => {
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); el.setPointerCapture(e.pointerId);
   drag = { x: e.clientX, y: e.clientY, moved: false, rot: carS.rot, lat: carS.lat, near: carS.near, focal: state.focal,
     pinch: pointers.size === 2 ? [...pointers.values()].reduce((a, p, i, arr) => i ? Math.hypot(p.x - arr[0].x, p.y - arr[0].y) : 0, 0) : 0 };
+  // press on a car = grab it: it follows the finger on a level plane through the grab point, so it never jumps
+  if (pointers.size === 1) {
+    setRay(e);
+    const hit = cars.map(c => [c, ray.intersectObject(c.holder, true)[0]]).filter(x => x[1]).sort((a, b) => a[1].distance - b[1].distance)[0];
+    if (hit) { const [c, h] = hit; drag.car = { c, plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), -h.point.y), offX: c.holder.position.x - h.point.x, offZ: c.holder.position.z - h.point.z, hdg: c.holder.rotation.y }; }
+  } else if (drag) drag.car = null;
 });
+const _gp = new THREE.Vector3();
+function setRay(e) { const r = el.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); }
+function dragCarTo(e) {
+  const g = drag.car; setRay(e);
+  if (!ray.ray.intersectPlane(g.plane, _gp) || _gp.distanceTo(camera.position) > 150) return;
+  const x = _gp.x + g.offX, z = _gp.z + g.offZ, b = rig.base0 + THREE.MathUtils.degToRad(rig.sceneAngle);
+  const fx = -Math.sin(b), fz = -Math.cos(b), rx = Math.cos(b), rz = -Math.sin(b);
+  g.c.s.near = +THREE.MathUtils.clamp(x * fx + z * fz, 3, 120).toFixed(2); g.c.s.lat = +THREE.MathUtils.clamp(x * rx + z * rz, -25, 25).toFixed(2);
+  // keep the car's heading fixed in the world while it moves
+  const P = computeCar(g.c.s, new THREE.Vector3()), toCam = Math.atan2(g.c.noseSign * -P.x, g.c.noseSign * -P.z);
+  g.c.s.rot = +((THREE.MathUtils.radToDeg(g.hdg - toCam) % 360 + 360) % 360).toFixed(1);
+  if (active !== g.c) active = g.c; ui?.sync(); markDirty();
+}
 el.addEventListener('pointermove', e => {
   if (!drag) return;
   pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (Math.hypot(dx, dy) > 5) drag.moved = true; if (!drag.moved) return;
   if (pointers.size === 2 && drag.pinch) { const [a, b] = [...pointers.values()]; setFocal(THREE.MathUtils.clamp(drag.focal * Math.hypot(a.x - b.x, a.y - b.y) / drag.pinch, 18, MAX_FOCAL)); ui?.sync(); return; }
+  if (drag.car && pointers.size === 1) { dragCarTo(e); return; }
   if (state.dragMode === 'rotate') { carS.rot = ((drag.rot + dx * 0.4) % 360 + 360) % 360; ui?.sync(); }
   else if (state.dragMode === 'move') {
     const k = 2 * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV()) / 2) * drag.near / VH();
@@ -302,7 +323,7 @@ el.addEventListener('pointermove', e => {
 });
 const endDrag = e => {
   pointers.delete(e.pointerId);
-  if (drag && !drag.moved && e.type === 'pointerup') { ndc.set(e.clientX / VW() * 2 - 1, -(e.clientY / VH()) * 2 + 1); ray.setFromCamera(ndc, camera);
+  if (drag && !drag.moved && e.type === 'pointerup') { setRay(e);
     const carHit = cars.map(c => [c, ray.intersectObject(c.holder, true)[0]]).filter(x => x[1]).sort((a, b) => a[1].distance - b[1].distance)[0];
     if (carHit && carHit[0] !== active) { active = carHit[0]; ui?.toast(`Editing car ${cars.indexOf(active) + 1}`); }
     const hits = ray.intersectObjects([...cars.map(c => c.holder), ...cars.map(c => c.ground.catcher), sky].filter(Boolean), true);
