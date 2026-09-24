@@ -1,0 +1,22 @@
+import puppeteer from 'puppeteer-core';
+const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', headless: 'new', protocolTimeout: 200000, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--js-flags=--max-old-space-size=384', '--renderer-process-limit=1'] });
+const p = await b.newPage(); p.on('pageerror', e => console.log('ERR', e.message)); p.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', m.text().slice(0, 200)); });
+await p.setViewport({ width: 640, height: 400 });
+await p.goto('http://localhost:4173/?loc=goegap_road&dof=0&sm=1024&lo=1', { waitUntil: 'load', timeout: 120000 }); await p.waitForFunction('window.__ready', { timeout: 150000 });
+const sig = () => p.evaluate(() => JSON.stringify({ loc: halide.state.loc, f: halide.state.focal, cars: halide.cars.map(c => [c.s.model, c.s.paint, c.s.rot, +c.s.lat.toFixed(2)]) }));
+await p.evaluate(() => { halide.carS.rot = 150; halide.carS.paint = halide.carS.paint; halide.setFocal(85); halide.markDirty(); });
+const before = await sig(); console.log('before', before);
+await p.evaluate(async () => {
+  const c = document.createElement('canvas'); c.width = 64; c.height = 40; c.getContext('2d').fillRect(0, 0, 64, 40);
+  const blob = await new Promise(r => c.toBlob(r, 'image/jpeg')); const scene = halide.snapshotScene();
+  const d = await new Promise((res, rej) => { const r = indexedDB.open('halide', 1); r.onupgradeneeded = () => r.result.createObjectStore('shots', { keyPath: 'id' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  await new Promise((res, rej) => { const t = d.transaction('shots', 'readwrite'); t.objectStore('shots').put({ id: 'test1', ts: Date.now(), blob, thumb: blob, w: 64, h: 40, scene, name: 't.jpg', where: 'Goegap · Desert road', exif: 'test' }); t.oncomplete = res; t.onerror = () => rej(t.error); });
+});
+await p.evaluate(async () => { await halide.setLocation('zwartkops_straight_afternoon'); halide.carS.rot = 30; halide.setFocal(35); });
+console.log('changed', await sig());
+await p.click('#top .galleryBtn'); await new Promise(r => setTimeout(r, 1500));
+await p.click('.g-item'); await new Promise(r => setTimeout(r, 1000)); await p.screenshot({ path: '/tmp/edit-viewer.png' });
+await p.click('#viewer .v-edit'); await p.waitForFunction(() => !document.body.classList.contains('scene-loading'), { timeout: 100000 });
+const after = await sig(); console.log('after', after, before === after ? 'MATCH' : 'DIFF');
+await new Promise(r => setTimeout(r, 8000)); await p.screenshot({ path: '/tmp/edit-after.png' });
+await b.close(); console.log('done');
