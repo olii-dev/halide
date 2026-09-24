@@ -304,6 +304,14 @@ export function activeIndex() { return cars.indexOf(active); }
 
 // Spinning wheel parts (rim, tyre, disc) get a pivot at the hub so they can
 // rotate about the axle; calipers stay put.
+// the tyre mesh of a wheel group: the biggest child mesh shaped like a disc. Returns its world axle and centre.
+function wheelTyre(o) {
+  o.updateMatrixWorld(true); let best = null;
+  o.traverse(m => { if (!m.isMesh || /BrakePad/.test(m.name)) return; m.geometry.computeBoundingBox(); const e = m.geometry.boundingBox.getSize(new THREE.Vector3()), d = [e.x, e.y, e.z].sort((a, b) => a - b);
+    if (d[0] < 0.7 * d[1] && Math.abs(d[1] - d[2]) < 0.05 * d[2] && (!best || d[2] > best.d)) best = { m, d: d[2], k: e.x === d[0] ? 0 : e.y === d[0] ? 1 : 2 }; });
+  if (!best) return null;
+  return { axle: new THREE.Vector3().setComponent(best.k, 1).transformDirection(best.m.matrixWorld), centre: best.m.geometry.boundingBox.getCenter(new THREE.Vector3()).applyMatrix4(best.m.matrixWorld) };
+}
 function buildWheels(c) {
   const car = c.model, wheels = c.wheels, steers = c.steers; car.updateMatrixWorld(true);
   const invCar = new THREE.Matrix4().copy(car.matrixWorld).invert(); let fz = 0, rz = 0;
@@ -315,7 +323,9 @@ function buildWheels(c) {
       // some source files pose the front wheels already steered; square them to the body so 0 deg really is straight
       o.updateMatrixWorld(true);
       // the axle is whichever local axis lies closest to the car's side-to-side axis (Blender wheels often use Y or Z)
-      const aC = [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)].map(a => a.transformDirection(o.matrixWorld).transformDirection(invCar)).reduce((b, a) => Math.abs(a.x) > Math.abs(b.x) ? a : b);
+      // prefer the tyre's own axle (its thinnest extent): loose-part cars (E30) keep the baked steer on the tyre, not the group
+      const ty = wheelTyre(o), axes = ty ? [ty.axle] : [new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 1)].map(a => a.transformDirection(o.matrixWorld));
+      const aC = axes.map(a => a.clone().transformDirection(invCar)).reduce((b, a) => Math.abs(a.x) > Math.abs(b.x) ? a : b);
       if (aC.x < 0) aC.negate(); const baked = Math.atan2(-aC.z, aC.x);
       if (Math.abs(baked) > 0.002) { const P0 = o.parent; P0.updateMatrixWorld(true);
         const upP = new THREE.Vector3(0, 1, 0).transformDirection(car.matrixWorld).transformDirection(new THREE.Matrix4().copy(P0.matrixWorld).invert()).normalize();
@@ -325,9 +335,13 @@ function buildWheels(c) {
     const bb = new THREE.Box3(); spin.forEach(c => bb.union(new THREE.Box3().setFromObject(c, true)));
     const cW = bb.getCenter(new THREE.Vector3()), radius = (bb.max.y - bb.min.y) / 2;
     const inv = new THREE.Matrix4().copy(o.matrixWorld).invert();
+    // stanced/cambered source wheels don't spin about the car's side axis: use the tyre's own axle (its thinnest
+    // extent) through its own centre, otherwise the spin blur sweeps a wobbling tyre and the wheel ghosts
+    let axW = axleW.clone(); const ty = wheelTyre(o);
+    if (ty) { const a = ty.axle.clone(); if (a.dot(axleW) < 0) a.negate(); if (a.angleTo(axleW) < THREE.MathUtils.degToRad(20)) { axW = a; cW.copy(ty.centre); } }
     const pivot = new THREE.Group(); pivot.position.copy(cW).applyMatrix4(inv); o.add(pivot); pivot.updateMatrixWorld(true);
     spin.forEach(c => pivot.attach(c));
-    const axis = axleW.clone().transformDirection(inv).normalize();
+    const axis = axW.transformDirection(inv).normalize();
     wheels.push({ pivot, axis, radius, base: pivot.quaternion.clone() });
     const cCar = cW.clone().applyMatrix4(invCar); if (/Front/.test(o.name)) fz += cCar.z; else rz += cCar.z;
     if (/Front/.test(o.name)) {
