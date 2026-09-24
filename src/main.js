@@ -99,7 +99,7 @@ export function applyPaint(c = active) {
   markDirty();
 }
 export function applyLights(c = active) {
-  const head = { off: 0, on: 1.6, high: 7 }[c.s.lights] ?? 1, tail = c.s.brake ? 6 : (c.s.lights === 'off' ? 0 : 1);
+  const head = { off: 0, on: 1.6, high: 7 }[c.s.lights] ?? 1, tail = c.s.brake ? 2.2 : (c.s.lights === 'off' ? 0 : 1);
   for (const m of c.lightMats.head) m.emissiveIntensity = head * (m.userData.gain ?? 1);
   for (const m of c.lightMats.tail) m.emissiveIntensity = tail * (m.userData.gain ?? 1);
   markDirty();
