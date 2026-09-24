@@ -2,15 +2,15 @@
 // height: camera height of the original capture (m), projects the ground.
 // u: horizontal panorama position (0..1) of a clear, flat spot for the car.
 export const LOCATIONS = [
-  { id: 'zwartkops_straight_afternoon', name: 'Zwartkops', place: 'Race circuit, Pretoria', height: 1.6, u: 0.31 },
-  { id: 'goegap_road', name: 'Goegap', place: 'Desert road, Namaqualand', height: 1.7, u: 0.462 },
+  { id: 'zwartkops_straight_afternoon', dust: '#8f8578', name: 'Zwartkops', place: 'Race circuit, Pretoria', height: 1.6, u: 0.31 },
+  { id: 'goegap_road', dust: '#a57a5c', name: 'Goegap', place: 'Desert road, Namaqualand', height: 1.7, u: 0.462 },
   { id: 'wide_street_01', name: 'Boulevard', place: 'Wide street, midday', height: 1.7, u: 0.39 },
   { id: 'modern_evening_street', name: 'Glass District', place: 'City street, evening', height: 1.7, u: 0.54 },
   { id: 'cobblestone_street_night', name: 'Old Town', place: 'Cobblestones, night', height: 1.7, u: 0.46 },
-  { id: 'mealie_road', name: 'Mealie Road', place: 'Farm road, golden hour', height: 1.7, u: 0.62 },
-  { id: 'lonely_road_afternoon', name: 'Lonely Road', place: 'Farm road, late sun', height: 1.7, u: 0.0 },
+  { id: 'mealie_road', dust: '#a88f6e', name: 'Mealie Road', place: 'Farm road, golden hour', height: 1.7, u: 0.62 },
+  { id: 'lonely_road_afternoon', dust: '#a88f6e', name: 'Lonely Road', place: 'Farm road, late sun', height: 1.7, u: 0.0 },
   { id: 'german_town_street', name: 'Stadtrand', place: 'Town edge, midday', height: 1.7, u: 0.12 },
-  { id: 'derelict_highway_noon', name: 'Old Highway', place: 'Cracked concrete, noon', height: 1.7, u: 0.58 },
+  { id: 'derelict_highway_noon', dust: '#9a9086', name: 'Old Highway', place: 'Cracked concrete, noon', height: 1.7, u: 0.58 },
   { id: 'rural_asphalt_road', name: 'Country Lane', place: 'Asphalt bend, summer', height: 1.7, u: 0.0 },
   { id: 'simons_town_harbour', name: "Simon's Town", place: 'Harbour quay, morning', height: 1.7, u: 0.97 },
   { id: 'horn-koppe_snow', name: 'Horn-Koppe', place: 'Snowfield, clear sky', height: 1.7, u: 0.2 },

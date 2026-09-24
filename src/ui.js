@@ -8,7 +8,7 @@ const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.
 
 // GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
 export function buildUI(api) {
-  const { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById } = api;
+  const { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById } = api;
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
@@ -142,6 +142,7 @@ export function buildUI(api) {
     if (carS.color) pick.style.background = carS.color; const P = paintById(carS.paint);
     pname.textContent = carS.color ? `Custom ${carS.color.toUpperCase()}` : P.code ? `${P.name} · ${P.code}` : P.name; });
   seg({ label: 'Finish', wrap: true, options: FINISHES, get: () => carS.finish, set: v => { carS.finish = v; applyPaint(); } });
+  slider({ label: 'Road dust', min: 0, max: 100, step: 1, nudge: 5, get: () => Math.round((carS.dust ?? 0) * 100), set: v => { carS.dust = clamp(v, 0, 100) / 100; applyDust(); }, fmt: v => v ? `${v}%` : 'clean', clamp: v => clamp(v, 0, 100) });
   section('car', 'Drag on the photo');
   seg({ note: 'off = dragging never moves anything', options: [{ id: 'off', name: 'Off' }, { id: 'rotate', name: 'Rotates car' }, { id: 'move', name: 'Moves car' }], get: () => state.dragMode, set: v => { state.dragMode = v; } , label: 'Drag' });
 

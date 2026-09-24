@@ -5,10 +5,10 @@ const p = await b.newPage(); p.on('pageerror', e => console.log('ERR', e.message
 await p.setViewport({ width: 1000, height: 640 });
 await p.goto(`http://localhost:4173/?loc=${process.env.LOC || "lonely_road_afternoon"}&dof=0&sm=1024&lo=1&f=50&grain=0&ca=0&ev=${process.env.EV || 0}`, { waitUntil: 'load', timeout: 60000 }); await p.waitForFunction('window.__ready', { timeout: 60000 });
 const PID = process.env.P || 'bmwm3e30:052';
-const out = await p.evaluate(async (M, PID, SAT, EXP) => { document.body.classList.remove('in-menu');
-  await halide.setCarModel(halide.cars[0], M); halide.cars[0].s.rot = 30; halide.setPaint(PID); if (SAT) halide.state.saturation = SAT; if (EXP) halide.state.exposure = EXP; halide.markDirty();
+const out = await p.evaluate(async (M, PID, SAT, EXP, DUST) => { document.body.classList.remove('in-menu');
+  await halide.setCarModel(halide.cars[0], M); halide.cars[0].s.rot = 30; halide.setPaint(PID); if (SAT) halide.state.saturation = SAT; halide.cars[0].s.dust = DUST; halide.applyDust(halide.cars[0]); if (EXP) halide.state.exposure = EXP; halide.markDirty();
   document.querySelector('.swatches button[data-id="'+PID+'"]')?.click(); await new Promise(r => setTimeout(r, 400)); const lab = [...document.querySelectorAll('.plabel')].find(x => /Factory/.test(x.textContent)); lab?.scrollIntoView({ block: 'start' });
-  return [lab?.textContent, document.querySelector('.pname')?.textContent]; }, process.env.M || 'bmwm3e30', PID, +process.env.SAT || 0, +process.env.EXP || 0);
+  return [lab?.textContent, document.querySelector('.pname')?.textContent]; }, process.env.M || 'bmwm3e30', PID, +process.env.SAT || 0, +process.env.EXP || 0, +process.env.DUST || 0);
 console.log(JSON.stringify(out));
 await new Promise(r => setTimeout(r, 16000)); await p.screenshot({ path: `/tmp/paint.png` }); console.log('shot');
 await b.close();

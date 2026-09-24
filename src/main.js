@@ -8,6 +8,7 @@ import { LOCATIONS, bearingFromU, MAX_FOCAL } from './locations.js';
 import { MODELS } from './cars.js';
 import { PAINTS, FINISHES, makePaint, resolvePaint, plateTexture, paintById } from './paint.js';
 import { FACTORY_PAINTS } from './factory-paints.js';
+import { addDust, dustColor } from './dust.js';
 import { buildUI } from './ui.js';
 
 const q = new URLSearchParams(location.search);
@@ -65,7 +66,7 @@ export function resetScene() {
 }
 export async function setLocation(id, { keepCar = false } = {}) {
   const L = LOCATIONS.find(l => l.id === id) || LOCATIONS[0];
-  state.loc = L.id;
+  state.loc = L.id; dustColor.value.set(L.dust || '#8f877c');
   const hdr = await loadHDR(`${BASE}assets/hdri/${L.id}_2k.hdr`);
   if (state.loc !== L.id) return;
   const info = analyse(hdr);
@@ -96,9 +97,10 @@ export async function setLocation(id, { keepCar = false } = {}) {
 export function setPaint(id) { if (id) carS.paint = id; applyPaint(); }
 export function applyPaint(c = active) {
   const p = resolvePaint(c.s.paint, c.s.finish, c.s.color);
-  for (const sl of c.paintSlots) { if (sl.mesh.material !== sl.original) sl.mesh.material.dispose?.(); sl.mesh.material = makePaint(p, sl.original); }
+  for (const sl of c.paintSlots) { if (sl.mesh.material !== sl.original) sl.mesh.material.dispose?.(); sl.mesh.material = addDust(makePaint(p, sl.original), c.dustU); }
   markDirty();
 }
+export function applyDust(c = active) { c.dustU.value = c.s.dust ?? 0; markDirty(); }
 export function applyLights(c = active) {
   const head = { off: 0, on: 1.6, high: 7 }[c.s.lights] ?? 1, tail = c.s.brake ? 2.2 : (c.s.lights === 'off' ? 0 : 1);
   for (const m of c.lightMats.head) m.emissiveIntensity = head * (m.userData.gain ?? 1);
@@ -255,7 +257,13 @@ function buildCar(s) {
       (isHead ? c.lightMats.head : c.lightMats.tail).push(o.material); }
   });
   for (const [o, head] of lamps) { if (head === 'lens') { o.material = new THREE.MeshPhysicalMaterial({ name: 'rear_lens', color: new THREE.Color('#8a0600'), transparent: true, opacity: 0.55, metalness: 0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.6, depthWrite: false }); o.castShadow = false; continue; } const m = o.material = o.material.clone(); m.emissive = new THREE.Color(head ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = head ? 5 : 0.9; if (!head) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } (head ? c.lightMats.head : c.lightMats.tail).push(m); }
-  buildWheels(c); applyPaint(c); applyLights(c); c.ground.bake(model);
+  buildWheels(c); c.dustU = { value: s.dust ?? 0 };
+  // dust goes on every opaque car surface (paint is handled in applyPaint); materials are shared between cars
+  // of the same model, so each car gets its own copies driven by its own dust amount
+  const lampM = new Set([...c.lightMats.head, ...c.lightMats.tail]), paintM = new Set(c.paintSlots.map(sl => sl.mesh));
+  model.traverse(o => { const m = o.material; if (!o.isMesh || !m?.isMeshStandardMaterial || lampM.has(m) || paintM.has(o) || m.transparent || m.transmission > 0) return;
+    let w = o.parent; while (w && !/^Wheel/.test(w.name)) w = w.parent; o.material = addDust(m.clone(), c.dustU, w ? 1.25 : 1); });
+  applyPaint(c); applyLights(c); c.ground.bake(model);
   return c;
 }
 export function addCar(s = null) {
@@ -526,7 +534,7 @@ await Promise.all([setLocation(state.loc), loadTemplate('concept').then(t => { t
 if (q.get('car') && q.get('car') !== 'concept') { const t = await loadTemplate(q.get('car')).catch(() => null); if (t) templates[q.get('car')].ready = t; }
 addCar(q.get('car') && templates[q.get('car')]?.ready ? { ...defaultCar(), model: q.get('car') } : null);
 resize(); frame();
-ui = buildUI({ snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById });
+ui = buildUI({ snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
 function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
@@ -549,5 +557,5 @@ let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() =>
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { applyLights, snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
+window.halide = { applyLights, applyDust, snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);
