@@ -45,6 +45,28 @@ void main(){
   gl_FragColor = vec4(col / tot, 1.);
 }`;
 
+
+// atmospheric haze: exponential height fog (thick near the ground, thin above) integrated along each view ray.
+// Its light is the place's own light: sky irradiance scattered evenly plus sunlight scattered forward
+// (Henyey-Greenstein), tinted by the local dust, so a hazy desert glows toward the sun like real dust.
+const hazeFS = `
+precision highp float;
+uniform sampler2D tColor, tDepth; uniform float near, far, sigma, falloff, g; uniform mat4 invProj, camWorld;
+uniform vec3 sunDir, sunRad, skyRad, tint; varying vec2 vUv;
+void main(){
+  vec3 c = texture2D(tColor, vUv).rgb; float d = texture2D(tDepth, vUv).x;
+  vec4 v = invProj * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); vec3 vp = v.xyz / v.w;
+  if (d >= 1.0) vp = normalize(vp) * 400.0;
+  vec3 wp = (camWorld * vec4(vp, 1.0)).xyz, co = (camWorld * vec4(0., 0., 0., 1.)).xyz;
+  vec3 ray = wp - co; float L = min(length(ray), 400.0); vec3 rd = ray / max(length(ray), 1e-4);
+  float y0 = max(co.y, 0.0), y1 = max(co.y + rd.y * L, 0.0), dy = (y1 - y0) / falloff;
+  float f = abs(dy) > 1e-3 ? (exp(-y0 / falloff) - exp(-y1 / falloff)) / dy : exp(-y0 / falloff);
+  float od = sigma * L * f; float T = exp(-od);
+  float mu = dot(rd, sunDir); float hg = (1.0 - g*g) / (12.566 * pow(1.0 + g*g - 2.0*g*mu, 1.5));
+  vec3 inscat = tint * 0.9 * (skyRad * 0.5 + sunRad * hg);
+  gl_FragColor = vec4(c * T + inscat * (1.0 - T), 1.0);
+}`;
+
 const downFS = `uniform sampler2D tMap; uniform vec2 px; varying vec2 vUv;
 void main(){ vec3 a = texture2D(tMap, vUv + px*vec2(-1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,-1.)).rgb + texture2D(tMap, vUv + px*vec2(-1.,1.)).rgb + texture2D(tMap, vUv + px*vec2(1.,1.)).rgb;
   vec3 c = a * 0.25; c = min(c, vec3(64.)); gl_FragColor = vec4(c, 1.); }`;
@@ -119,6 +141,10 @@ export class Post {
       time: { value: 0 }, res: { value: new THREE.Vector2() }, toneMappingExposure: { value: 1 }, tBloom: { value: null }, bloom: { value: 0.045 },
       contrast: { value: 1 }, saturation: { value: 1 }, lookSat: { value: 1 }, lookLift: { value: 0 }, lookMono: { value: 0 },
       wb: { value: new THREE.Vector3(1, 1, 1) }, lookMul: { value: new THREE.Vector3(1, 1, 1) }, monoTint: { value: new THREE.Vector3(1, 1, 1) } } });
+    this.haze = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: hazeFS, uniforms: {
+      tColor: { value: null }, tDepth: { value: null }, near: { value: 0.1 }, far: { value: 1000 }, sigma: { value: 0 }, falloff: { value: 7 }, g: { value: 0.55 },
+      invProj: { value: new THREE.Matrix4() }, camWorld: { value: new THREE.Matrix4() }, sunDir: { value: new THREE.Vector3(0, 1, 0) },
+      sunRad: { value: new THREE.Vector3() }, skyRad: { value: new THREE.Vector3(1, 1, 1) }, tint: { value: new THREE.Vector3(1, 1, 1) } } });
     this.down = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: downFS, uniforms: { tMap: { value: null }, px: { value: new THREE.Vector2() } } });
     this.up = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: upFS, uniforms: { tMap: { value: null }, tPrev: { value: null }, px: { value: new THREE.Vector2() } } });
     this.black = new THREE.DataTexture(new Uint8Array(4), 1, 1); this.black.needsUpdate = true;
@@ -132,7 +158,8 @@ export class Post {
   }
   setSize(w, h) {
     this.w = w; this.h = h;
-    this.rtScene?.dispose(); this.rtDof?.dispose();
+    this.rtScene?.dispose(); this.rtDof?.dispose(); this.rtHaze?.dispose();
+    this.rtHaze = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
     this.rtScene = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: 4,
       depthTexture: new THREE.DepthTexture(w, h, THREE.FloatType) });
     this.rtDof = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType });
@@ -165,6 +192,15 @@ export class Post {
       u.tColor.value = this.rtScene.texture;
     }
     u.tDepth.value = this.rtScene.depthTexture;
+    if (opts.haze > 0 && this.env) {
+      const hz = this.haze.uniforms, e = this.env, a = opts.haze;
+      hz.tColor.value = u.tColor.value; hz.tDepth.value = this.rtScene.depthTexture;
+      hz.invProj.value.copy(camera.projectionMatrixInverse); hz.camWorld.value.copy(camera.matrixWorld);
+      // slider 0..1 -> extinction at ground level from ~0.001/m (a hint of distance haze) to ~0.03/m (thick dust: the car still reads, the hills go)
+      hz.sigma.value = 0.0008 * Math.pow(40, a); hz.falloff.value = 5 + 10 * a;
+      hz.sunDir.value.copy(e.sunDir); hz.sunRad.value.copy(e.sunRad); hz.skyRad.value.copy(e.skyRad); hz.tint.value.copy(e.tint);
+      this.quad.material = this.haze; r.setRenderTarget(this.rtHaze); this.quad.render(r); u.tColor.value = this.rtHaze.texture;
+    }
     u.near.value = camera.near; u.far.value = camera.far;
     u.focus.value = opts.focus; u.focal.value = camera.getFocalLength(); u.fstop.value = opts.fstop;
     u.sensorH.value = camera.getFilmHeight() * (opts.sensorScale ?? 1);

@@ -83,7 +83,7 @@ export function analyse(tex) {
     hasSun, sunDir, envTex,
     sunColor: sunLum > 0 ? sunE.clone().multiplyScalar(1 / sunLum) : new THREE.Vector3(1, 1, 1),
     sunIntensity: sunLum, skyLum, groundL: gL / Math.max(gN, 1),
-    skyIrradiance: skyLum,
+    skyIrradiance: skyLum, skyE: skyE.clone(),
     sunShare: hasSun ? sunOnGround / (sunOnGround + skyLum) : 0,
     peak: maxL, median,
   };

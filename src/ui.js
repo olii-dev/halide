@@ -175,6 +175,7 @@ export function buildUI(api) {
   buttons([['Aim at car', () => frameCar()], ['Level', () => { rig.roll = 0; rig.tilt = 0; }]]);
   section('camera', 'Scene');
   slider({ label: 'Scene angle', min: -180, max: 180, step: 0.5, nudge: 1, get: () => rig.sceneAngle, set: v => { rig.sceneAngle = ((v + 540) % 360) - 180; }, fmt: v => signed(v, 1, '°') });
+  slider({ label: 'Haze', min: 0, max: 100, step: 1, nudge: 5, get: () => Math.round((state.haze ?? 0) * 100), set: v => { state.haze = clamp(v, 0, 100) / 100; }, fmt: v => v ? `${v}%` : 'clear', clamp: v => clamp(v, 0, 100) });
   const sn = document.createElement('p'); sn.className = 'note'; sn.textContent = 'Turns the whole place around you and the car: picks which part of the location is behind the shot.'; cur.appendChild(sn);
 
   // ---------- EFFECTS ----------
