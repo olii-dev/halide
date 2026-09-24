@@ -249,7 +249,8 @@ function buildCar(s) {
     if (isHead || isTail) { o.material = o.material.clone();
       // source emissive maps are unreliable (often UV'd onto dark atlas areas), so glow through the lamp's own
       // colour texture: reflectors, LEDs and lenses light up where they are bright, housings stay darker
-      if (cfg.head || cfg.tail) { const m = o.material; m.emissive = new THREE.Color(isHead ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = isHead ? 5 : 0.9; if (!isHead) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } m.needsUpdate = true; }
+      if (cfg.lampTex?.includes(n)) { const m = o.material; m.emissive = new THREE.Color(isHead ? '#ffffff' : '#ff1a0a'); m.emissiveMap = m.map; m.userData.gain = isHead ? 5 : 1.6; m.needsUpdate = true; }
+      else if (cfg.head || cfg.tail) { const m = o.material; m.emissive = new THREE.Color(isHead ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = isHead ? 5 : 0.9; if (!isHead) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } m.needsUpdate = true; }
       (isHead ? c.lightMats.head : c.lightMats.tail).push(o.material); }
   });
   for (const [o, head] of lamps) { if (head === 'lens') { o.material = new THREE.MeshPhysicalMaterial({ name: 'rear_lens', color: new THREE.Color('#8a0600'), transparent: true, opacity: 0.55, metalness: 0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.6, depthWrite: false }); o.castShadow = false; continue; } const m = o.material = o.material.clone(); m.emissive = new THREE.Color(head ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = head ? 5 : 0.9; if (!head) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } (head ? c.lightMats.head : c.lightMats.tail).push(m); }

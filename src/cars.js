@@ -8,7 +8,7 @@ export const MODELS = [
   { id: 'bmwm3e30', name: 'BMW M3 (E30)', year: 1987, file: 'bmwm3e30.glb', tire: ['BMW_E30_M3_TIRE'], spin: ['BMW_E30_M3_RIM', 'Brake_Disc'], fixed: ['Brembo_Calipers', 'Logo_Plane'],
     paint: ['BMW_E30_M3_PAINT'], hide: [], glass: { BMW_E30_M3_WINDOWS: 0.55, BMW_E30_M3_LENS: 1 }, head: ['BMW_E30_M3_HEADLIGHT_REFLECTOR'], tail: ['BMW_E30_M3_TAILLIGHT_REFLECTOR'], lens: ['BMW_E30_M3_LENS'], length: 4.345, front: '+z',
     credit: '"[FREE] BMW M3 E30" by Martin Trafas, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/free-bmw-m3-e30-ac3c7013434e403e8faff87948caf422' },
-  { id: 'nsx90', name: 'Honda NSX', year: 1990, file: 'nsx90.glb', tire: ['Material.011'], paint: ['Material.003'], hide: [], hideNodes: ['Plane_11', 'Plane.001_13'], glass: { 'Material.004': 0.3 }, head: ['Material.013'], tail: ['Material.009'], length: 4.405, front: '+z',
+  { id: 'nsx90', name: 'Honda NSX', year: 1990, file: 'nsx90.glb', tire: ['Material.011'], paint: ['Material.003'], hide: [], hideNodes: ['Plane_11', 'Plane.001_13'], glass: { 'Material.004': 0.3 }, head: ['Material.013'], tail: ['Material.009'], lampTex: ['Material.009'], length: 4.405, front: '+z',
     credit: '"Honda NSX 1990" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/honda-nsx-1990-1cc15628a00a4739a6b6c01128927c8d' },
   { id: 'sl300', name: 'Mercedes-Benz 300 SL Gullwing', year: 1954, file: 'sl300.glb', tire: ['tire'], merged: ['chrome', 'mid-chrome', 'black'], paint: ['main_color'], hide: [], glass: { Material: 0.88 }, length: 4.52, front: '+z',
     credit: '"Mercedes-Benz 300 SL Gullwing" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/mercedes-benz-300-sl-gullwing-505241c829c540a4921533000736904e' },
