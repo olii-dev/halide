@@ -1,13 +1,14 @@
 const $ = (s) => document.querySelector(s);
 import { MAX_FOCAL } from './locations.js';
 import { LOOKS } from './post.js';
+import { saveShot, listShots, deleteShot } from './gallery.js';
 const FSTOPS = [1.4, 1.8, 2, 2.8, 4, 5.6, 8, 11, 16, 22];
 const SHUTTERS = [15, 30, 60, 125, 250, 500, 1000];
 const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(d)}${u}`;
 
 // GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
 export function buildUI(api) {
-  const { state, rig, carS, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
+  const { state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
@@ -65,6 +66,20 @@ export function buildUI(api) {
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
   // ---------- CAR ----------
+  section('car', 'Cars');
+  const carsBox = document.createElement('div'); carsBox.className = 'seg cars'; cur.appendChild(carsBox);
+  const carBtns = buttons([
+    ['+ Add car', () => { if (!addCar()) toast(`Up to ${MAX_CARS} cars`); else frameNote(); }],
+    ['Duplicate', () => { if (!duplicateCar()) toast(`Up to ${MAX_CARS} cars`); else frameNote(); }],
+    ['Remove', () => { if (cars.length > 1) removeCar(); }],
+  ]);
+  const cn = document.createElement('p'); cn.className = 'note'; cn.textContent = 'Everything below edits the selected car. Tap a car in the photo to select it.'; cur.appendChild(cn);
+  function frameNote() { toast(`Car ${activeIndex() + 1} added`); }
+  syncs.push(() => {
+    if (carsBox.children.length !== cars.length) { carsBox.innerHTML = ''; cars.forEach((c, i) => { const b = document.createElement('button'); b.onclick = () => { selectCar(i); changed(); }; carsBox.appendChild(b); }); }
+    [...carsBox.children].forEach((b, i) => { b.classList.toggle('on', i === activeIndex()); b.innerHTML = `<i style="background:${cars[i].s.color || PAINTS.find(p => p.id === cars[i].s.paint).color}"></i>Car ${i + 1}`; });
+    const [add, dup, rem] = carBtns.children; add.disabled = dup.disabled = cars.length >= MAX_CARS; rem.disabled = cars.length <= 1;
+  });
   section('car', 'Position');
   slider({ label: 'Left / Right', min: -25, max: 25, step: 0.01, nudge: 0.05, get: () => carS.lat, set: v => { carS.lat = clamp(v, -25, 25); }, fmt: v => `${Math.abs(v) < 0.005 ? 'centre' : `${Math.abs(v).toFixed(2)} m ${v < 0 ? 'L' : 'R'}`}`, clamp: v => clamp(v, -25, 25) });
   slider({ label: 'Near / Far', min: 3, max: 80, step: 0.01, nudge: 0.1, get: () => carS.near, set: v => { carS.near = clamp(v, 3, 80); }, fmt: v => `${v.toFixed(2)} m`, clamp: v => clamp(v, 3, 80),
@@ -174,6 +189,15 @@ export function buildUI(api) {
   const reveal = $('#reveal'), img = reveal.querySelector('img');
   let shot = null;
   function fileName() { const L = LOCATIONS.find(l => l.id === state.loc); return `halide-${L.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36)}.jpg`; }
+  function saveBlobAs(url, name, w, h) {
+    if (matchMedia('(max-width: 820px)').matches && navigator.canShare) {
+      fetch(url).then(r => r.blob()).then(b => { const f = new File([b], name, { type: 'image/jpeg' });
+        if (navigator.canShare({ files: [f] })) return navigator.share({ files: [f] }); throw 0; }).catch(e => { if (e?.name !== 'AbortError') dlUrl(url, name, w, h); });
+      return;
+    }
+    dlUrl(url, name, w, h);
+  }
+  function dlUrl(url, name, w, h) { const a = document.createElement('a'); a.href = url; a.download = name; a.click(); toast(`Saved ${w}×${h}`); }
   function save() {
     if (!shot) return;
     // phones: the share sheet offers "Save Image" straight to Photos
@@ -214,11 +238,44 @@ export function buildUI(api) {
       bits.push(`1/${state.shutter}s`); if (state.speed > 0) bits.push(`${state.speed} km/h`); if (state.look !== 'none') bits.push(LOOKS[state.look].name);
       bits.push(`${w}×${h}`);
       reveal.querySelector('.exif').textContent = bits.join('  ·  ');
+      saveShot({ blob, w, h, name: shot.name, where: `${L.name} · ${L.place}`, exif: bits.join('  ·  ') }).then(() => { toast('Kept in your gallery'); refreshCount(); }).catch(e => console.warn('gallery', e));
       document.body.classList.remove('developing');
       reveal.setAttribute('aria-hidden', 'false'); void reveal.offsetWidth; reveal.classList.add('show');
     } catch (e) { console.error(e); document.body.classList.remove('developing'); toast('Could not develop the photo on this device'); }
     s.classList.remove('busy');
   };
+  // ---------- gallery ----------
+  const gal = $('#gallery'), ggrid = gal.querySelector('.g-grid'), viewer = $('#viewer'), vimg = viewer.querySelector('img');
+  let urls = [], viewing = null;
+  async function refreshCount() { try { const n = (await listShots()).length; for (const el of document.querySelectorAll('.g-n')) el.textContent = n ? ` ${n}` : ''; } catch {} }
+  async function openGallery() {
+    document.body.classList.add('in-gallery'); urls.forEach(u => URL.revokeObjectURL(u)); urls = []; ggrid.innerHTML = '';
+    const shots = await listShots().catch(() => []);
+    gal.querySelector('.g-count').textContent = shots.length ? `${shots.length} photo${shots.length > 1 ? 's' : ''} · kept on this device` : '';
+    gal.classList.toggle('empty', !shots.length);
+    for (const sh of shots) {
+      const u = URL.createObjectURL(sh.thumb); urls.push(u);
+      const b = document.createElement('button'); b.className = 'g-item';
+      b.innerHTML = `<img alt="" src="${u}"><span>${sh.where.split(' · ')[0]}<small>${new Date(sh.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</small></span>`;
+      b.onclick = () => openShot(sh); ggrid.appendChild(b);
+    }
+  }
+  function closeGallery() { document.body.classList.remove('in-gallery'); }
+  function openShot(sh) {
+    viewing = { ...sh, url: URL.createObjectURL(sh.blob) }; vimg.src = viewing.url;
+    viewer.querySelector('.where').innerHTML = `<b>HALIDE</b>${sh.where}`; viewer.querySelector('.exif').textContent = sh.exif || `${sh.w}×${sh.h}`;
+    viewer.classList.add('show');
+  }
+  function closeShot() { viewer.classList.remove('show'); const v = viewing; viewing = null; if (v) setTimeout(() => URL.revokeObjectURL(v.url), 500); }
+  viewer.querySelector('.v-back').onclick = closeShot;
+  viewer.querySelector('.v-save').onclick = () => viewing && saveBlobAs(viewing.url, viewing.name, viewing.w, viewing.h);
+  viewer.querySelector('.v-del').onclick = async () => { if (!viewing || !confirm('Delete this photo from the gallery?')) return; await deleteShot(viewing.id); closeShot(); openGallery(); refreshCount(); };
+  for (const b of document.querySelectorAll('.galleryBtn')) b.onclick = openGallery;
+  gal.querySelector('.g-close').onclick = closeGallery;
+  reveal.querySelector('.gal').onclick = () => { closeReveal(); openGallery(); };
+  addEventListener('keydown', e => { if (e.key !== 'Escape') return; if (viewer.classList.contains('show')) closeShot(); else if (document.body.classList.contains('in-gallery')) closeGallery(); });
+  refreshCount();
+
   return {
     sync: syncAll, toast,
     focusPing(x, y) { const r = $('#focusRing'); r.style.left = x + 'px'; r.style.top = y + 'px'; r.classList.add('show'); setTimeout(() => r.classList.remove('show'), 700); },

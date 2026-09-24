@@ -8,7 +8,7 @@ import { FullScreenQuad } from 'three/examples/jsm/postprocessing/Pass.js';
 const AO_RES = 512;
 
 export class Ground {
-  constructor(renderer, scene) {
+  constructor(renderer, scene, { useSun = true } = {}) {
     this.renderer = renderer;
     this.extent = 9; // metres covered by the occlusion map (square, centred on car)
     this.rtA = new THREE.WebGLRenderTarget(AO_RES, AO_RES, { type: THREE.HalfFloatType });
@@ -44,13 +44,13 @@ export class Ground {
     const mat = new THREE.ShadowMaterial({ transparent: true, depthWrite: false });
     mat.userData.uniforms = {
       tAO: { value: this.rtA.texture }, tC: { value: this.rtC.texture }, aoExtent: { value: this.extent },
-      sunShare: { value: 0.6 }, carPos: { value: new THREE.Vector2() }, carYaw: { value: 0 }, aoStrength: { value: 1.0 }, contactStrength: { value: 1.0 },
+      sunShare: { value: 0.6 }, carPos: { value: new THREE.Vector2() }, carYaw: { value: 0 }, aoStrength: { value: 1.0 }, contactStrength: { value: 1.0 }, useSun: { value: useSun ? 1 : 0 },
     };
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, mat.userData.uniforms);
       sh.vertexShader = sh.vertexShader.replace('void main() {', 'varying vec3 vWorldP;\nvoid main() {\nvWorldP = (modelMatrix*vec4(position,1.)).xyz;');
       sh.fragmentShader = sh.fragmentShader
-        .replace('void main() {', `varying vec3 vWorldP; uniform sampler2D tAO, tC; uniform float aoExtent, sunShare, aoStrength, contactStrength, carYaw; uniform vec2 carPos;
+        .replace('void main() {', `varying vec3 vWorldP; uniform sampler2D tAO, tC; uniform float aoExtent, sunShare, aoStrength, contactStrength, carYaw, useSun; uniform vec2 carPos;
 void main() {`)
         .replace('gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) );', `
   vec2 lp = vWorldP.xz - carPos; float cy = cos(carYaw), sy = sin(carYaw); lp = vec2(cy*lp.x - sy*lp.y, sy*lp.x + cy*lp.y);
@@ -60,7 +60,7 @@ void main() {`)
   float sky = 1.0 - clamp(ao.g * aoStrength, 0.0, 1.0);          // broad sky occlusion
   sky *= 1.0 - clamp(ao.r * contactStrength * 0.6, 0.0, 1.0);    // tight contact darkening
   float tight = texture2D(tC, auv).r * edge.x * edge.y;
-  float lit = sunShare * getShadowMask() + (1.0 - sunShare) * sky;
+  float lit = sunShare * mix(1.0, getShadowMask(), useSun) + (1.0 - sunShare) * sky;
   lit *= 1.0 - clamp(tight * 1.6, 0.0, 0.92) * contactStrength;
   gl_FragColor = vec4( color, 1.0 - lit );`);
     };
@@ -105,3 +105,8 @@ void main() {`)
     r.setRenderTarget(prevTarget); r.setClearColor(prevClear, prevAlpha);
   }
 }
+
+Ground.prototype.dispose = function () {
+  this.catcher.parent?.remove(this.catcher); this.catcher.geometry.dispose(); this.catcher.material.dispose();
+  for (const t of [this.rtA, this.rtB, this.rtC, this.rtD]) t.dispose();
+};

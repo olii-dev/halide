@@ -34,7 +34,10 @@ camera.setFocalLength(state.focal);
 // camera sits where the panorama was shot; the scene axis (base) is where the car goes
 export const rig = { camH: +(q.get('h') ?? 1.1), pan: 0, tilt: 0, roll: 0, sceneAngle: 0, base: 0, aimY: 0.6 };
 // the car: position in metres along the scene axis, heading relative to the camera (0 = nose to camera)
-export const carS = { lat: 0, near: 14, rot: 30, steer: 0, paint: q.get('paint') ?? 'rosso', finish: 'paint', color: null, lights: 'on', brake: false };
+const defaultCar = () => ({ lat: 0, near: 14, rot: 30, steer: 0, paint: q.get('paint') ?? 'rosso', finish: 'paint', color: null, lights: 'on', brake: false });
+export const MAX_CARS = 4;
+export const cars = []; let active = null; // up to 4 cars; every CAR-tab control edits the active one
+export const carS = new Proxy({}, { get: (_, k) => active?.s[k], set: (_, k, v) => { active.s[k] = v; return true; } });
 const pmrem = new THREE.PMREMGenerator(renderer);
 const sun = new THREE.DirectionalLight(0xffffff, 1);
 sun.castShadow = true; const SM_PREVIEW = q.get('sm') ? +q.get('sm') : 2048, SM_EXPORT = q.get('sm') ? +q.get('sm') : 4096;
@@ -42,15 +45,14 @@ sun.shadow.mapSize.setScalar(SM_PREVIEW);
 sun.shadow.radius = 10; sun.shadow.blurSamples = 20; sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.03;
 scene.add(sun, sun.target);
 const sunDir = new THREE.Vector3(0, 1, 0);
-const ground = new Ground(renderer, scene);
 const post = new Post(renderer);      // full-res still: DoF, bloom, wheel blur
 const postLo = new Post(renderer);    // live preview while things move: CSS-pixel res, no DoF/bloom
 let dirty = true, lastChange = 0, hiDone = false, lastSig = '';
 export function markDirty() { dirty = true; }
 function setShadowSize(n) { if (sun.shadow.mapSize.x === n) return; sun.shadow.mapSize.setScalar(n); sun.shadow.map?.dispose(); sun.shadow.map = null; }
-const carHolder = new THREE.Group(); scene.add(carHolder);
+let sunShare = 0.6;
 const backdropMeta = fetch(`${BASE}assets/backdrop/backdrops.json`).then(r => r.json()).catch(() => ({}));
-let sky = null, car = null, carRadius = 3, paintSlots = [];
+let sky = null, template = null, carRadius = 3;
 
 export async function setLocation(id, { keepCar = false } = {}) {
   const L = LOCATIONS.find(l => l.id === id) || LOCATIONS[0];
@@ -67,8 +69,8 @@ export async function setLocation(id, { keepCar = false } = {}) {
   sun.visible = info.hasSun;
   sun.color.setRGB(info.sunColor.x, info.sunColor.y, info.sunColor.z, THREE.LinearSRGBColorSpace);
   sun.intensity = info.sunIntensity; sunDir.copy(info.sunDir);
-  ground.sunShare = info.sunShare;
-  rig.base0 = bearingFromU(L.u); if (!keepCar) { rig.sceneAngle = 0; rig.pan = 0; rig.tilt = 0; rig.roll = 0; carS.lat = 0; frame(); }
+  sunShare = info.sunShare; for (const c of cars) c.ground.sunShare = sunShare;
+  rig.base0 = bearingFromU(L.u); if (!keepCar) { rig.sceneAngle = 0; rig.pan = 0; rig.tilt = 0; rig.roll = 0; if (active) { carS.lat = 0; frame(); } }
   window.__env = { id: L.id, hasSun: info.hasSun, sunShare: +info.sunShare.toFixed(3), sunDir: info.sunDir.toArray().map(v => +v.toFixed(3)), sunI: +info.sunIntensity.toFixed(1), skyE: +info.skyLum.toFixed(1), groundL: +info.groundL.toFixed(3),
     impliedAlbedo: +(Math.PI * info.groundL / (info.sunIntensity * Math.max(info.sunDir.y, 0) + info.skyLum)).toFixed(3) };
   console.log('env', JSON.stringify(window.__env));
@@ -83,27 +85,25 @@ export async function setLocation(id, { keepCar = false } = {}) {
 }
 
 export function setPaint(id) { if (id) carS.paint = id; applyPaint(); }
-export function applyPaint() {
-  const p = resolvePaint(carS.paint, carS.finish, carS.color);
-  for (const s of paintSlots) { s.mesh.material.dispose?.(); s.mesh.material = makePaint(p, s.original); }
+export function applyPaint(c = active) {
+  const p = resolvePaint(c.s.paint, c.s.finish, c.s.color);
+  for (const sl of c.paintSlots) { if (sl.mesh.material !== sl.original) sl.mesh.material.dispose?.(); sl.mesh.material = makePaint(p, sl.original); }
   markDirty();
 }
-let lightMats = { head: [], tail: [] };
-export function applyLights() {
-  const head = { off: 0, on: 1.6, high: 7 }[carS.lights] ?? 1, tail = carS.brake ? 6 : (carS.lights === 'off' ? 0 : 1);
-  for (const m of lightMats.head) m.emissiveIntensity = head;
-  for (const m of lightMats.tail) m.emissiveIntensity = tail;
+export function applyLights(c = active) {
+  const head = { off: 0, on: 1.6, high: 7 }[c.s.lights] ?? 1, tail = c.s.brake ? 6 : (c.s.lights === 'off' ? 0 : 1);
+  for (const m of c.lightMats.head) m.emissiveIntensity = head;
+  for (const m of c.lightMats.tail) m.emissiveIntensity = tail;
   markDirty();
 }
 
-async function loadCar() {
+async function loadTemplate() {
   const gltf = await new GLTFLoader().loadAsync(`${BASE}assets/cars/CarConcept.glb`);
-  car = gltf.scene; car.updateMatrixWorld(true);
+  const car = gltf.scene; car.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(car, true);
   // sit on the tyres (not on whatever hangs lowest), with a hair of tyre squash
   const tyres = new THREE.Box3();
   car.traverse(o => { if (/^Wheel(Front|Rear)[LR]$/.test(o.name)) tyres.union(new THREE.Box3().setFromObject(o, true)); });
-  console.log('minY body', box.min.y.toFixed(3), 'tyres', tyres.min.y.toFixed(3));
   car.position.y -= (tyres.isEmpty() ? box.min.y : tyres.min.y) + 0.006;
   const size = box.getSize(new THREE.Vector3()); carRadius = size.length() / 2;
   const plate = plateTexture(); plate.flipY = false;
@@ -111,29 +111,52 @@ async function loadCar() {
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true;
     const n = o.material.name || '';
-    if (/^Paint 1/.test(n)) paintSlots.push({ mesh: o, original: o.material });
     if (n === 'License') { o.material = o.material.clone(); o.material.map = plate; o.material.needsUpdate = true; }
     // rubber: the source file has glossy sidewalls (0.4) that mirror warm skies as tan
     if (n === 'Tireside') { o.material = o.material.clone(); o.material.roughness = 0.82; o.material.envMapIntensity = 0.75; }
     if (n === 'Tiretread') { o.material = o.material.clone(); o.material.roughness = 0.9; o.material.envMapIntensity = 0.7; }
-    if (n === 'Headlight') { o.material = o.material.clone(); lightMats.head.push(o.material); }
-    if (n === 'Brakelight') { o.material = o.material.clone(); lightMats.tail.push(o.material); }
     if (/^Paint 2/.test(n)) { o.material = o.material.clone(); o.material.normalMap = null; o.material.clearcoat = 0.6; o.material.clearcoatRoughness = 0.08; o.material.roughness = 0.45; }
   });
-  carHolder.add(car);
-  if (q.has('dbg')) car.traverse(o => { if (/^Wheel(Front|Rear)[LR]$/.test(o.name)) { const c = new THREE.Box3().setFromObject(o).getCenter(new THREE.Vector3());
-    const d = new THREE.Mesh(new THREE.CircleGeometry(0.25, 24), new THREE.MeshBasicMaterial({ color: 0x00ff00 })); d.rotation.x = -Math.PI / 2; d.position.set(c.x, 0.003 - car.position.y, c.z); car.add(d); } });
-  if (q.has('nosun')) sun.intensity = 0;
-  applyPaint(); applyLights();
-  buildWheels();
-  ground.bake(car);
+  template = car;
 }
+
+// one car in the scene: its own model copy, paint, lights, wheels and contact shadow
+export function addCar(s = null) {
+  if (cars.length >= MAX_CARS) return null;
+  const model = template.clone(true), holder = new THREE.Group(); holder.add(model); scene.add(holder);
+  const c = { s: s ?? defaultCar(), model, holder, paintSlots: [], lightMats: { head: [], tail: [] }, wheels: [], steers: [], noseSign: 1,
+    ground: new Ground(renderer, scene, { useSun: cars.length === 0 }) };
+  c.ground.sunShare = sunShare;
+  model.traverse(o => {
+    if (!o.isMesh) return; const n = o.material.name || '';
+    if (/^Paint 1/.test(n)) c.paintSlots.push({ mesh: o, original: o.material });
+    if (n === 'Headlight') { o.material = o.material.clone(); c.lightMats.head.push(o.material); }
+    if (n === 'Brakelight') { o.material = o.material.clone(); c.lightMats.tail.push(o.material); }
+  });
+  buildWheels(c); applyPaint(c); applyLights(c); c.ground.bake(model);
+  cars.push(c); active = c; renderer.shadowMap.needsUpdate = true; markDirty();
+  return c;
+}
+export function duplicateCar() {
+  if (!active || cars.length >= MAX_CARS) return null;
+  const s = { ...active.s, lat: active.s.lat + 3.2, near: active.s.near + 1.5 };
+  return addCar(s);
+}
+export function removeCar(c = active) {
+  if (cars.length <= 1) return;
+  const i = cars.indexOf(c); cars.splice(i, 1);
+  scene.remove(c.holder); c.ground.dispose();
+  c.model.traverse(o => { if (o.isMesh) for (const sl of c.paintSlots) if (sl.mesh === o) o.material.dispose?.(); });
+  if (!cars.some(x => x.ground.catcher.material.userData.uniforms.useSun.value)) cars[0].ground.catcher.material.userData.uniforms.useSun.value = 1;
+  active = cars[Math.min(i, cars.length - 1)]; renderer.shadowMap.needsUpdate = true; markDirty();
+}
+export function selectCar(i) { if (cars[i]) { active = cars[i]; markDirty(); } }
+export function activeIndex() { return cars.indexOf(active); }
 
 // Spinning wheel parts (rim, tyre, disc) get a pivot at the hub so they can
 // rotate about the axle; calipers stay put.
-let wheels = [], steers = [], noseSign = 1;
-function buildWheels() {
-  wheels = []; steers = []; car.updateMatrixWorld(true);
+function buildWheels(c) {
+  const car = c.model, wheels = c.wheels, steers = c.steers; car.updateMatrixWorld(true);
   const invCar = new THREE.Matrix4().copy(car.matrixWorld).invert(); let fz = 0, rz = 0;
   const axleW = new THREE.Vector3(1, 0, 0).transformDirection(car.matrixWorld);
   car.traverse(o => {
@@ -155,14 +178,14 @@ function buildWheels() {
       steers.push({ g: st, up, base: st.quaternion.clone() });
     }
   });
-  noseSign = fz > rz ? 1 : -1;
+  c.noseSign = fz > rz ? 1 : -1;
 }
-function applySteer() { for (const s of steers) s.g.quaternion.copy(s.base).multiply(_q.setFromAxisAngle(s.up, THREE.MathUtils.degToRad(carS.steer))); }
+function applySteer(c) { for (const st of c.steers) st.g.quaternion.copy(st.base).multiply(_q.setFromAxisAngle(st.up, THREE.MathUtils.degToRad(c.s.steer))); }
 const _q = new THREE.Quaternion();
 function spinWheels(t) {
   // t in [-0.5, 0.5] of the shutter; angle = v / r * shutter * t (rolling forward)
   const v = state.speed / 3.6, sh = 1 / state.shutter;
-  for (const w of wheels) { _q.setFromAxisAngle(w.axis, v / w.radius * sh * t); w.pivot.quaternion.copy(w.base).multiply(_q); }
+  for (const c of cars) for (const w of c.wheels) { _q.setFromAxisAngle(w.axis, v / w.radius * sh * t); w.pivot.quaternion.copy(w.base).multiply(_q); }
 }
 const subframe = t => spinWheels(t);
 
@@ -178,10 +201,10 @@ export function setFocal(mm, { dolly = state.dollyZoom } = {}) {
   if (dolly) carS.near = THREE.MathUtils.clamp(carS.near * k, 3, 120); // dolly zoom: car keeps its size, background compresses
 }
 export const carPos = new THREE.Vector3();
-function computeCar() {
+function computeCar(s = active.s, out = carPos) {
   const b = rig.base0 + THREE.MathUtils.degToRad(rig.sceneAngle); rig.base = b;
   const fx = -Math.sin(b), fz = -Math.cos(b), rx = Math.cos(b), rz = -Math.sin(b);
-  carPos.set(fx * carS.near + rx * carS.lat, 0, fz * carS.near + rz * carS.lat);
+  return out.set(fx * s.near + rx * s.lat, 0, fz * s.near + rz * s.lat);
 }
 export function carDistance() { computeCar(); return Math.hypot(carPos.x, rig.camH - rig.aimY, carPos.z); }
 export function frameCar() { // aim the camera straight at the car
@@ -189,17 +212,21 @@ export function frameCar() { // aim the camera straight at the car
 }
 function applyRig() {
   const L = LOCATIONS.find(l => l.id === state.loc); rig.camH = THREE.MathUtils.clamp(rig.camH, 0.25, L.height);
+  const P = new THREE.Vector3(), box = new THREE.Box2();
+  for (const c of cars) {
+    computeCar(c.s, P); const toCam = Math.atan2(c.noseSign * -P.x, c.noseSign * -P.z);
+    c.holder.position.set(P.x, 0, P.z); c.holder.rotation.y = toCam + THREE.MathUtils.degToRad(c.s.rot);
+    applySteer(c); c.ground.setCarTransform(c.holder); box.expandByPoint(new THREE.Vector2(P.x, P.z));
+  }
   computeCar(); const cx = carPos.x, cz = carPos.z;
-  const toCam = Math.atan2(noseSign * -cx, noseSign * -cz);
-  carHolder.position.set(cx, 0, cz); carHolder.rotation.y = toCam + THREE.MathUtils.degToRad(carS.rot);
-  applySteer();
   camera.position.set(0, rig.camH, 0);
   const autoPitch = Math.atan2(rig.aimY - rig.camH, Math.hypot(cx, cz));
   camera.rotation.set(autoPitch + THREE.MathUtils.degToRad(rig.tilt), rig.base + THREE.MathUtils.degToRad(rig.pan), THREE.MathUtils.degToRad(rig.roll), 'YXZ');
   if (state.focusMode === 'car') state.focus = carDistance();
-  ground.setCarTransform(carHolder);
-  sun.target.position.set(cx, 0, cz); sun.position.set(cx, 0, cz).addScaledVector(sunDir, 20);
-  const s = sun.shadow.camera; if (s.right !== 7) { Object.assign(s, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 50 }); s.updateProjectionMatrix(); }
+  // sun shadow covers every car
+  const ctr = box.getCenter(new THREE.Vector2()), ext = Math.ceil(box.getSize(new THREE.Vector2()).length() / 2 + 6);
+  sun.target.position.set(ctr.x, 0, ctr.y); sun.position.set(ctr.x, 0, ctr.y).addScaledVector(sunDir, 20 + ext);
+  const s = sun.shadow.camera; if (s.right !== ext) { Object.assign(s, { left: -ext, right: ext, top: ext, bottom: -ext, near: 1, far: 60 + ext * 2 }); s.updateProjectionMatrix(); }
 }
 const ASPECTS = { free: 0, '3:2': 3 / 2, '16:9': 16 / 9, '1:1': 1, '4:5': 4 / 5, '21:9': 21 / 9, '2:3': 2 / 3, '9:16': 9 / 16 };
 export function cropRect(W = VW(), H = VH()) {
@@ -264,7 +291,9 @@ el.addEventListener('pointermove', e => {
 const endDrag = e => {
   pointers.delete(e.pointerId);
   if (drag && !drag.moved && e.type === 'pointerup') { ndc.set(e.clientX / VW() * 2 - 1, -(e.clientY / VH()) * 2 + 1); ray.setFromCamera(ndc, camera);
-    const hits = ray.intersectObjects([carHolder, ground.catcher, sky].filter(Boolean), true);
+    const carHit = cars.map(c => [c, ray.intersectObject(c.holder, true)[0]]).filter(x => x[1]).sort((a, b) => a[1].distance - b[1].distance)[0];
+    if (carHit && carHit[0] !== active) { active = carHit[0]; ui?.toast(`Editing car ${cars.indexOf(active) + 1}`); }
+    const hits = ray.intersectObjects([...cars.map(c => c.holder), ...cars.map(c => c.ground.catcher), sky].filter(Boolean), true);
     if (hits.length) { state.focusMode = 'manual'; state.focus = +hits[0].distance.toFixed(2); ui?.focusPing(e.clientX, e.clientY); ui?.sync(); } }
   if (!pointers.size) drag = null;
 };
@@ -286,19 +315,20 @@ addEventListener('keydown', e => {
 });
 
 let ui = null;
-await Promise.all([setLocation(state.loc), loadCar()]);
+await Promise.all([setLocation(state.loc), loadTemplate()]);
+addCar();
 resize(); frame();
-ui = buildUI({ state, rig, carS, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
+ui = buildUI({ state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
-function signature() { return JSON.stringify([rig, carS, state]) + VW() + 'x' + VH(); }
-let lastCarSig = '';
+function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
+let lastCarSig = '', lastSteer = '';
 function loop(now) {
   requestAnimationFrame(loop);
   const sig = signature(); if (sig !== lastSig) { lastSig = sig; dirty = true; }
   if (dirty) {
     dirty = false; lastChange = now; hiDone = false; applyRig();
-    const carSig = [carS.lat, carS.near, carS.rot, carS.steer, rig.sceneAngle, state.loc].join('|'); if (carSig !== lastCarSig) { if (lastCarSig.split('|')[3] !== String(carS.steer)) rebake(); lastCarSig = carSig; renderer.shadowMap.needsUpdate = true; }
+    const carSig = JSON.stringify([cars.map(c => [c.s.lat, c.s.near, c.s.rot]), rig.sceneAngle, state.loc]), steerSig = cars.map(c => c.s.steer).join(); if (steerSig !== lastSteer) { lastSteer = steerSig; rebake(); } if (carSig !== lastCarSig) { lastCarSig = carSig; renderer.shadowMap.needsUpdate = true; }
     const t0 = performance.now(); postLo.render(scene, camera, { ...state, dof: false, bloomOff: true, animateGrain: false, subframe: null });
     if (PERF) { renderer.getContext().finish(); PERF.lo.push(performance.now() - t0); }
   } else if (!hiDone && !(drag && drag.moved) && now - lastChange > 450) {
@@ -307,9 +337,9 @@ function loop(now) {
     if (PERF) { renderer.getContext().finish(); PERF.hi.push(performance.now() - t0); }
   }
 }
-let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() => { applySteer(); ground.bake(car); markDirty(); }, 150); }
+let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() => { for (const c of cars) { applySteer(c); c.ground.bake(c.model); } renderer.shadowMap.needsUpdate = true; markDirty(); }, 150); }
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { markDirty, state, rig, carS, exportPhoto, setLocation, setPaint, setFocal, frameCar, car, carHolder, THREE, camera, sun, scene };
+window.halide = { markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);

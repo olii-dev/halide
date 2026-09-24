@@ -168,3 +168,44 @@ body.in-menu #panel, body.in-menu #shutter, body.in-menu #panelBtn, body.in-menu
 #menu .card small { display: block; margin-top: 3px; color: rgba(243,239,230,.65); font-size: 11px; letter-spacing: .06em; }
 #scenesBtn.pill { width: auto; height: auto; font-family: inherit; font-style: normal; color: var(--ink); border-radius: 999px; padding: 7px 14px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin-left: auto; margin-right: 10px; }
 @media (max-width: 820px) { #menu .m-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } #menu { justify-content: flex-start; } }
+
+.seg.cars button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.seg.cars i { width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
+.btns button:disabled { opacity: .35; cursor: default; }
+
+/* ---- gallery ---- */
+.pill.galleryBtn, #top .pill { width: auto; height: auto; font-family: inherit; font-style: normal; color: var(--ink); border-radius: 999px; padding: 7px 14px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+.g-n { color: var(--amber); }
+#menu .m-gal { margin-top: 16px; }
+#gallery { position: fixed; inset: 0; z-index: 35; background: rgba(8,8,7,.97); display: flex; flex-direction: column; padding: max(18px, env(safe-area-inset-top)) 22px 22px; opacity: 0; pointer-events: none; transition: opacity .35s; }
+body.in-gallery #gallery { opacity: 1; pointer-events: auto; }
+#gallery .g-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 18px; }
+#gallery .g-title { letter-spacing: .5em; font-weight: 600; font-size: 18px; }
+#gallery .g-count { flex: 1; color: var(--dim); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+#gallery .g-close { border: 1px solid var(--line); background: rgba(243,239,230,.06); border-radius: 999px; padding: 7px 16px; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
+#gallery .g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; overflow-y: auto; padding-bottom: 30px; }
+#gallery .g-item { position: relative; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #111; aspect-ratio: 3/2; }
+#gallery .g-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s cubic-bezier(.16,1,.3,1); }
+#gallery .g-item:hover img { transform: scale(1.04); }
+#gallery .g-item span { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; background: linear-gradient(transparent, rgba(0,0,0,.75)); text-align: left; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; font-weight: 600; }
+#gallery .g-item small { display: block; font-weight: 400; letter-spacing: .04em; text-transform: none; color: var(--dim); margin-top: 2px; }
+#gallery .g-empty { display: none; margin: 18vh auto 0; color: var(--dim); max-width: 320px; text-align: center; line-height: 1.5; }
+#gallery.empty .g-empty { display: block; }
+#viewer { position: fixed; inset: 0; z-index: 45; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 24px; background: rgba(5,5,5,.96); opacity: 0; pointer-events: none; transition: opacity .3s; }
+#viewer.show { opacity: 1; pointer-events: auto; }
+#viewer .print { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+#viewer .mat { background: #f3efe6; padding: clamp(6px, 1.1vw, 14px); box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+#viewer img { display: block; max-width: min(88vw, 1500px); max-height: 70vh; }
+#viewer figcaption { width: 0; min-width: 100%; display: flex; justify-content: space-between; gap: 24px; font-size: 11px; letter-spacing: .12em; color: rgba(243,239,230,.62); text-transform: uppercase; }
+#viewer .where b { color: var(--ink); letter-spacing: .32em; margin-right: 10px; }
+#viewer .exif { font-family: ui-monospace, Menlo, monospace; letter-spacing: .04em; text-transform: none; }
+#viewer .actions { display: flex; gap: 10px; }
+#viewer .actions button { border-radius: 999px; padding: 10px 20px; font-size: 13px; background: rgba(243,239,230,.08); border: 1px solid var(--line); }
+#viewer .actions .primary { background: var(--ink); color: #111; border-color: var(--ink); font-weight: 600; }
+#viewer .actions .v-del { color: #ff8a7a; }
+body.in-gallery #panel, body.in-gallery #shutter { opacity: 0; pointer-events: none; }
+@media (max-width: 820px) {
+  #gallery .g-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  #viewer figcaption { flex-direction: column; gap: 4px; } #viewer .actions { width: 100%; } #viewer .actions button { flex: 1; }
+  #top .galleryBtn { padding: 7px 10px; }
+}

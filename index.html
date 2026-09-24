@@ -12,13 +12,14 @@
 <div id="stage"></div>
 <div id="boot"><div class="mark">HALIDE</div><div class="sub">developing…</div></div>
 <section id="menu" aria-label="Choose a scene">
-  <div class="m-head"><div class="m-title">HALIDE</div><div class="m-sub">SCAPES · choose a place to shoot</div></div>
+  <div class="m-head"><div class="m-title">HALIDE</div><div class="m-sub">SCAPES · choose a place to shoot</div><button class="ghost pill galleryBtn m-gal">Gallery<span class="g-n"></span></button></div>
   <div class="m-grid"></div>
 </section>
 <header id="top">
   <div class="brand">HALIDE</div>
   <div id="sceneName"></div>
   <button id="scenesBtn" class="ghost pill">Scenes</button>
+  <button class="ghost pill galleryBtn">Gallery<span class="g-n"></span></button>
   <button id="aboutBtn" class="ghost" aria-label="About">i</button>
 </header>
 <div id="frameBox"><i class="g"></i></div>
@@ -44,9 +45,17 @@
   </figure>
   <div class="actions">
     <button class="back">Back to camera</button>
+    <button class="gal">Gallery</button>
     <button class="save primary">Save photo</button>
   </div>
 </div>
+<section id="gallery" aria-label="Gallery">
+  <div class="g-head"><div class="g-title">GALLERY</div><span class="g-count"></span><button class="g-close pill">Close</button></div>
+  <div class="g-grid"></div>
+  <div class="g-empty">No photos yet. Every photo you take is kept here, on this device only.</div>
+</section>
+<div id="viewer"><figure class="print"><div class="mat"><img alt="Photo"></div><figcaption><span class="where"></span><span class="exif"></span></figcaption></figure>
+  <div class="actions"><button class="v-back">Back</button><button class="v-del">Delete</button><button class="v-save primary">Save photo</button></div></div>
 <div id="toast"></div>
 <dialog id="about">
   <h2>Halide</h2>
