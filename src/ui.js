@@ -14,7 +14,7 @@ export function buildUI(api) {
   const grid = $('#menu .m-grid');
   for (const L of LOCATIONS) {
     const c = document.createElement('button'); c.className = 'card'; c.dataset.id = L.id;
-    c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg"><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
+    c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg?v=place2"><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
     c.onclick = async () => {
       // hide the old scene while the new one loads, so a slow phone never shows the previous place under the new name
       document.body.classList.remove('in-menu'); document.body.classList.add('scene-loading'); $('#sceneLoad').textContent = `Loading ${L.name}…`;
