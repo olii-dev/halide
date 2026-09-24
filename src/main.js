@@ -138,7 +138,7 @@ export async function setLocation(id, { keepCar = false } = {}) {
   if (!q.has('lo')) Promise.all([backdropMeta, new THREE.TextureLoader().loadAsync(`${BASE}assets/backdrop/${L.id}_${big ? '8k' : '4k'}.jpg`)]).then(([meta, tex]) => {
     if (!(sky && state.loc === L.id)) { tex.dispose(); return; }
     tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); tex.generateMipmaps = true;
-    const old = sky.material.map; sky.material.map = tex; sky.material.color.setScalar(meta[L.id]?.white ?? 1); sky.material.needsUpdate = true; old.dispose(); window.__hi = true; markDirty();
+    const old = sky.material.map; sky.material.map = tex; sky.material.color.setScalar(L.white ?? meta[L.id]?.white ?? 1) // L.white overrides the auto-exposure when the HDRI's bright spot misleads it (covered pit); sky.material.needsUpdate = true; old.dispose(); window.__hi = true; markDirty();
   });
 }
 

@@ -22,7 +22,7 @@ export const LOCATIONS = [
   { id: 'venice_sunset', name: 'Venice', place: 'Waterfront, sunset', height: 1.7, u: 0.85, iconic: true },
   { id: 'zwartkops_start_sunset', dust: '#8f8578', name: 'Zwartkops Grid', place: 'Start/finish straight, sunset', height: 1.7, u: 0.4, track: true },
   { id: 'zwartkops_curve_sunset', dust: '#8f8578', name: 'Zwartkops Hairpin', place: 'Track curve, sunset', height: 1.7, u: 0.88, track: true },
-  { id: 'zwartkops_pit', name: 'Zwartkops Pit Lane', place: 'Covered pits, trackside', height: 1.7, u: 0.42, track: true },
+  { id: 'zwartkops_pit', name: 'Zwartkops Pit Lane', place: 'Covered pits, trackside', height: 1.7, u: 0.42, track: true, white: 3 },
   { id: 'skidpan', name: 'Skidpan', place: 'Test pad, stormy sky', height: 1.7, u: 0.3, track: true },
   { id: 'kart_club', name: 'Kart Club', place: 'Indoor kart track', height: 1.7, u: 0.52, track: true, sun: false },
   { id: 'piazza_san_marco', name: 'Piazza San Marco', place: 'Venice, morning', height: 1.7, u: 0.5, iconic: true },
