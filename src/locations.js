@@ -12,6 +12,7 @@ export const LOCATIONS = [
   { id: 'german_town_street', name: 'Stadtrand', place: 'Town edge, midday', height: 1.7, u: 0.12 },
   { id: 'derelict_highway_noon', name: 'Old Highway', place: 'Cracked concrete, noon', height: 1.7, u: 0.58 },
   { id: 'rural_asphalt_road', name: 'Country Lane', place: 'Asphalt bend, summer', height: 1.7, u: 0.0 },
+  { id: 'simons_town_harbour', name: "Simon's Town", place: 'Harbour quay, morning', height: 1.7, u: 0.97 },
   { id: 'horn-koppe_snow', name: 'Horn-Koppe', place: 'Snowfield, clear sky', height: 1.7, u: 0.2 },
 ];
 export function bearingFromU(u) { const t = (u - 0.5) * 2 * Math.PI; return Math.atan2(-Math.cos(t), -Math.sin(t)); }
