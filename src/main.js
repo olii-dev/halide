@@ -252,7 +252,7 @@ function buildCar(s) {
       if (cfg.head || cfg.tail) { const m = o.material; m.emissive = new THREE.Color(isHead ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = isHead ? 5 : 0.9; if (!isHead) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } m.needsUpdate = true; }
       (isHead ? c.lightMats.head : c.lightMats.tail).push(o.material); }
   });
-  for (const [o, head] of lamps) { if (head === 'lens') { const g = o.material = o.material.clone(); g.color = new THREE.Color('#ff1208'); g.roughness = 0.05; continue; } const m = o.material = o.material.clone(); m.emissive = new THREE.Color(head ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = head ? 5 : 0.9; if (!head) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } (head ? c.lightMats.head : c.lightMats.tail).push(m); }
+  for (const [o, head] of lamps) { if (head === 'lens') { o.material = new THREE.MeshPhysicalMaterial({ name: 'rear_lens', color: new THREE.Color('#8a0600'), transparent: true, opacity: 0.55, metalness: 0, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02, envMapIntensity: 0.6, depthWrite: false }); o.castShadow = false; continue; } const m = o.material = o.material.clone(); m.emissive = new THREE.Color(head ? '#fff1dc' : '#ff0a00'); m.emissiveMap = null; m.userData.gain = head ? 5 : 0.9; if (!head) { m.color = new THREE.Color('#3a0000'); m.metalness = 0; m.roughness = 0.55; m.envMapIntensity = 0.15; } (head ? c.lightMats.head : c.lightMats.tail).push(m); }
   buildWheels(c); applyPaint(c); applyLights(c); c.ground.bake(model);
   return c;
 }
