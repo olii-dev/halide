@@ -206,7 +206,7 @@ body.in-gallery #gallery { opacity: 1; pointer-events: auto; }
 body.in-gallery #panel, body.in-gallery #shutter { opacity: 0; pointer-events: none; }
 @media (max-width: 820px) {
   #gallery .g-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-  #viewer figcaption { flex-direction: column; gap: 4px; } #viewer .actions { width: 100%; } #viewer .actions button { flex: 1; }
+  #viewer figcaption { flex-direction: column; gap: 4px; } #viewer .actions { width: 100%; flex-wrap: wrap; gap: 8px; } #viewer .actions button { flex: 1 1 28%; padding: 10px 8px; } #viewer .actions .v-save { flex-basis: 100%; }
   #top .galleryBtn { padding: 7px 10px; }
 }
 

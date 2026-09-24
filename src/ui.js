@@ -293,6 +293,12 @@ export function buildUI(api) {
     catch (e) { console.error(e); toast('Could not reopen that setup'); }
     document.body.classList.remove('scene-loading'); showScene(); syncAll();
   };
+  // duplicate: an independent copy of the photo and its saved setup, shown straight away
+  viewer.querySelector('.v-dup').onclick = async () => {
+    if (!viewing) return; const { id, ts, url, thumb, ...rest } = viewing;
+    try { const rec = await saveShot({ ...rest, name: rest.name?.replace(/(\.\w+)$/, '-copy$1') }); closeShot(); await openGallery(); refreshCount(); openShot(rec); toast('Duplicated'); }
+    catch (e) { console.error(e); toast('Could not duplicate that photo'); }
+  };
   viewer.querySelector('.v-save').onclick = () => viewing && saveBlobAs(viewing.url, viewing.name, viewing.w, viewing.h);
   viewer.querySelector('.v-del').onclick = async () => { if (!viewing || !confirm('Delete this photo from the gallery?')) return; await deleteShot(viewing.id); closeShot(); openGallery(); refreshCount(); };
   for (const b of document.querySelectorAll('.galleryBtn')) b.onclick = openGallery;
