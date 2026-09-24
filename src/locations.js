@@ -15,6 +15,11 @@ export const LOCATIONS = [
   { id: 'rural_asphalt_road', name: 'Country Lane', place: 'Asphalt bend, summer', height: 1.7, u: 0.0 },
   { id: 'simons_town_harbour', name: "Simon's Town", place: 'Harbour quay, morning', height: 1.7, u: 0.97 },
   { id: 'horn-koppe_snow', name: 'Horn-Koppe', place: 'Snowfield, clear sky', height: 1.7, u: 0.2 },
+  { id: 'shanghai_bund', name: 'The Bund', place: 'Riverside promenade, Shanghai, night', height: 1.7, u: 0.56, sun: false, iconic: true },
+  { id: 'neuer_zollhof', name: 'Medienhafen', place: 'Gehry towers, Düsseldorf, dusk', height: 1.7, u: 0.2, iconic: true },
+  { id: 'potsdamer_platz', name: 'Potsdamer Platz', place: 'City crossing, Berlin', height: 1.7, u: 0.6, iconic: true },
+  { id: 'quattro_canti', name: 'Quattro Canti', place: 'Baroque crossroads, Palermo', height: 1.7, u: 0.4, iconic: true },
+  { id: 'venice_sunset', name: 'Venice', place: 'Waterfront, sunset', height: 1.7, u: 0.85, iconic: true },
 ];
 export function bearingFromU(u) { const t = (u - 0.5) * 2 * Math.PI; return Math.atan2(-Math.cos(t), -Math.sin(t)); }
 export const MAX_FOCAL = 135; // mm; past this an 8k panorama backdrop visibly softens
