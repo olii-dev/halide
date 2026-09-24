@@ -68,14 +68,21 @@ void main(){
 
 const finalFS = `
 uniform sampler2D tBloom; uniform float bloom;
-uniform sampler2D tColor; uniform float exposure, grain, vignette, time, contrast, saturation, lookSat, lookLift, lookMono; uniform vec2 res; uniform vec3 wb, lookMul, monoTint;
+uniform sampler2D tColor; uniform float exposure, grain, vignette, ca, time, contrast, saturation, lookSat, lookLift, lookMono; uniform vec2 res; uniform vec3 wb, lookMul, monoTint;
 
 varying vec2 vUv;
 #include <tonemapping_pars_fragment>
 
 float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
 void main(){
-  vec3 c = mix(texture2D(tColor, vUv).rgb, texture2D(tBloom, vUv).rgb / 6.0, bloom) * exposure * wb;
+  // lateral chromatic aberration: red and blue land at slightly different
+  // magnifications, so fringes grow toward the frame edges (none at centre)
+  vec2 d = vUv - 0.5; vec2 k = d * dot(d, d) * ca * 0.028;
+  vec3 c0 = texture2D(tColor, vUv).rgb;
+  if (ca > 0.0) { c0.r = texture2D(tColor, clamp(vUv - k, 0.0, 1.0)).r; c0.b = texture2D(tColor, clamp(vUv + k, 0.0, 1.0)).b; }
+  vec3 c = mix(c0, texture2D(tBloom, vUv).rgb / 6.0, bloom) * exposure * wb;
   vec2 q = vUv - 0.5; q.x *= res.x / res.y;
   c *= mix(1.0, smoothstep(1.25, 0.2, length(q)), vignette);
   c = AgXToneMapping(c);
@@ -87,10 +94,15 @@ void main(){
   o.rgb = mix(o.rgb, vec3(lum) * monoTint, lookMono);
   o.rgb = mix(vec3(lookLift), vec3(1.0 - lookLift * 0.6), o.rgb) * lookMul;
   // grain: gaussian-ish, strongest in midtones, like film
-  vec2 g = gl_FragCoord.xy + time * 91.7;
-  float n = (hash(g) + hash(g + 17.3) + hash(g + 41.9) - 1.5) * 0.8;
+  // grain is sized to the frame (as if shot on the same film stock), so a
+  // 4K/8K export looks like the preview instead of turning into fine fizz
+  float gs = max(1.0, res.y / 1080.0);
+  vec2 g = gl_FragCoord.xy / gs + time * 91.7;
+  float n = (vnoise(g) + vnoise(g * 1.7 + 17.3) + vnoise(g * 0.6 + 41.9) - 1.5) * 1.1;
+  float nc = vnoise(g * 1.3 + 71.1) - 0.5;
   float l = dot(o.rgb, vec3(0.299, 0.587, 0.114));
-  o.rgb += n * grain * 0.09 * (0.35 + 1.3 * l * (1.0 - l));
+  float amt = grain * 0.09 * (0.35 + 1.3 * l * (1.0 - l));
+  o.rgb += amt * (n + vec3(0.12, -0.05, 0.10) * nc);
   gl_FragColor = vec4(clamp(o.rgb, 0.0, 1.0), 1.0);
 }`;
 
@@ -103,7 +115,7 @@ export class Post {
       near: { value: 0.1 }, far: { value: 1000 }, focus: { value: 8 }, focal: { value: 85 }, fstop: { value: 2.8 },
       sensorH: { value: 24 }, maxCoC: { value: 24 }, radScale: { value: 1.2 } } });
     this.final = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: finalFS, uniforms: {
-      tColor: { value: null }, exposure: { value: 1 }, grain: { value: 0.35 }, vignette: { value: 0.35 },
+      tColor: { value: null }, exposure: { value: 1 }, grain: { value: 0.35 }, vignette: { value: 0.35 }, ca: { value: 0 },
       time: { value: 0 }, res: { value: new THREE.Vector2() }, toneMappingExposure: { value: 1 }, tBloom: { value: null }, bloom: { value: 0.045 },
       contrast: { value: 1 }, saturation: { value: 1 }, lookSat: { value: 1 }, lookLift: { value: 0 }, lookMono: { value: 0 },
       wb: { value: new THREE.Vector3(1, 1, 1) }, lookMul: { value: new THREE.Vector3(1, 1, 1) }, monoTint: { value: new THREE.Vector3(1, 1, 1) } } });
@@ -183,7 +195,7 @@ export class Post {
     const L = LOOKS[opts.look] || LOOKS.none; f.lookSat.value = L.sat; f.lookLift.value = L.lift; f.lookMono.value = L.mono; f.lookMul.value.fromArray(L.mul); f.monoTint.value.fromArray(L.tint);
     const t = opts.temp ?? 0, g = opts.tint ?? 0; f.wb.value.set(1 + 0.13 * t + 0.03 * g, 1 - 0.07 * g, 1 - 0.15 * t + 0.03 * g);
     f.tColor.value = colorTex; f.exposure.value = Math.pow(2, opts.ev); f.grain.value = opts.grain;
-    f.vignette.value = opts.vignette; f.time.value = opts.animateGrain ? (performance.now() % 1000) : 0;
+    f.vignette.value = opts.vignette; f.ca.value = opts.ca ?? 0; f.time.value = opts.animateGrain ? (performance.now() % 1000) : 0;
     this.quad.material = this.final; r.setRenderTarget(target); this.quad.render(r);
   }
 }

@@ -167,9 +167,10 @@ export function buildUI(api) {
   slider({ label: 'Saturation', min: 0, max: 2, step: 0.01, nudge: 0.05, get: () => state.saturation, set: v => { state.saturation = clamp(v, 0, 2); }, fmt: v => signed((v - 1) * 100, 0), parse: n => 1 + n / 100 });
   section('effects', 'Lens effects');
   slider({ label: 'Vignette', min: 0, max: 1, step: 0.01, nudge: 0.05, get: () => state.vignette, set: v => { state.vignette = clamp(v, 0, 1); }, fmt: v => `${Math.round(v * 100)}`, parse: n => n / 100 });
+  slider({ label: 'Chromatic aberration', min: 0, max: 1, step: 0.01, nudge: 0.05, get: () => state.ca, set: v => { state.ca = clamp(v, 0, 1); }, fmt: v => `${Math.round(v * 100)}`, parse: n => n / 100 });
   slider({ label: 'Film grain', min: 0, max: 1, step: 0.01, nudge: 0.05, get: () => state.grain, set: v => { state.grain = clamp(v, 0, 1); }, fmt: v => `${Math.round(v * 100)}`, parse: n => n / 100 });
   slider({ label: 'Glow (bloom)', min: 0, max: 3, step: 0.05, nudge: 0.1, get: () => state.bloom, set: v => { state.bloom = clamp(v, 0, 3); }, fmt: v => `${Math.round(v * 100)}%`, parse: n => n / 100 });
-  buttons([['Reset effects', () => Object.assign(state, { look: 'none', temp: 0, tint: 0, contrast: 1, saturation: 1, vignette: 0.3, grain: 0.3, bloom: 1 })]]);
+  buttons([['Reset effects', () => Object.assign(state, { look: 'none', temp: 0, tint: 0, contrast: 1, saturation: 1, vignette: 0.3, ca: 0.2, grain: 0.3, bloom: 1 })]]);
 
   // ---------- tabs, panel, frame overlay ----------
   const tabs = document.querySelectorAll('#panel .tabs [data-tab]');

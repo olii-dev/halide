@@ -28,7 +28,7 @@ camera.filmGauge = 36;
 
 export const state = {
   focal: Math.min(+(q.get('f') ?? 50), MAX_FOCAL), fstop: +(q.get('n') ?? 2.8), ev: +(q.get('ev') ?? 0), grain: +(q.get('grain') ?? 0.3), speed: +(q.get('kmh') ?? 0), previewSamples: +(q.get('ps') ?? 6),
-  shutter: 60, vignette: 0.3, focus: 8, focusMode: 'car', dof: q.get('dof') !== '0', loc: q.get('loc') ?? LOCATIONS[0].id,
+  shutter: 60, vignette: 0.3, ca: +(q.get('ca') ?? 0.2), focus: 8, focusMode: 'car', dof: q.get('dof') !== '0', loc: q.get('loc') ?? LOCATIONS[0].id,
   bloom: 1, contrast: 1, saturation: 1, temp: 0, tint: 0, look: 'none', panBlur: false, aspect: 'free', grid: 'off', dragMode: 'off', dollyZoom: false,
 };
 camera.setFocalLength(state.focal);
