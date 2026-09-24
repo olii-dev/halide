@@ -8,7 +8,7 @@ const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.
 
 // GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
 export function buildUI(api) {
-  const { resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
+  const { setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
@@ -79,6 +79,14 @@ export function buildUI(api) {
     ['Duplicate', () => { if (!duplicateCar()) toast(`Up to ${MAX_CARS} cars`); else frameNote(); }],
     ['Remove', () => { if (cars.length > 1) removeCar(); }],
   ]);
+  // model picker: swap the selected car for another model, keeping its spot, paint and settings
+  let loadingModel = null;
+  seg({ label: 'Model', options: MODELS.map(m => ({ id: m.id, name: m.year ? `${m.name.replace(/ \(.*\)/, '')} '${String(m.year).slice(2)}` : m.name })),
+    get: () => loadingModel ?? carS.model,
+    set: id => { if (id === carS.model || loadingModel) return; loadingModel = id; toast('Loading car…');
+      const c = cars[activeIndex()];
+      setCarModel(c, id).then(() => { loadingModel = null; toast(MODELS.find(m => m.id === id).name); changed(); })
+        .catch(e => { loadingModel = null; console.error(e); toast('Could not load that car'); changed(); }); } });
   const cn = document.createElement('p'); cn.className = 'note'; cn.textContent = 'Everything below edits the selected car. Tap a car in the photo to select it.'; cur.appendChild(cn);
   function frameNote() { toast(`Car ${activeIndex() + 1} added`); }
   syncs.push(() => {

@@ -134,6 +134,9 @@ async function prepTemplate(cfg) {
 // Sketchfab models: rotate so the nose points +z, scale to real length, and name the 4 road wheels
 // WheelFrontL/R, WheelRearL/R so steering, spin and ground contact work the same as the concept car.
 function normaliseModel(src, cfg) {
+  // drop baked shadow planes etc. first so they don't count toward size or ground contact
+  const hide = new Set(cfg.hide || []), drop = [];
+  src.traverse(o => { if (o.isMesh && hide.has(o.material.name)) drop.push(o); }); for (const o of drop) o.removeFromParent();
   const root = new THREE.Group(), inner = new THREE.Group(); inner.add(src); root.add(inner); root.updateMatrixWorld(true);
   let box = new THREE.Box3().setFromObject(root, true), size = box.getSize(new THREE.Vector3());
   if (size.x > size.z) inner.rotation.y = Math.PI / 2;
@@ -146,8 +149,8 @@ function normaliseModel(src, cfg) {
   src.traverse(o => { if (!o.isMesh && o.children.some(c => c.isMesh && cfg.tire.includes(c.material.name))) found.push(o); });
   const wheels = found.map(o => ({ o, c: new THREE.Box3().setFromObject(o, true).getCenter(new THREE.Vector3()) })).filter(w => w.c.y < box.min.y + 0.4 * H);
   for (const w of wheels) w.o.name = `Wheel${w.c.z > 0 ? 'Front' : 'Rear'}${w.c.x > 0 ? 'L' : 'R'}`;
-  const paint = new Set(cfg.paint), hide = new Set(cfg.hide || []);
-  src.traverse(o => { if (!o.isMesh) return; const n = o.material.name; if (paint.has(n)) o.material.name = 'Paint 1'; if (hide.has(n)) o.visible = false; });
+  const paint = new Set(cfg.paint);
+  src.traverse(o => { if (o.isMesh && paint.has(o.material.name)) o.material.name = 'Paint 1'; });
   return root;
 }
 
