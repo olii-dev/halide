@@ -12,21 +12,49 @@ export function buildUI(api) {
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
+  // GT7-style scene browser: filter chips + sort; each card carries its type badge
+  const kindOf = L => L.plate ? 'famous' : L.track ? 'tracks' : L.iconic ? 'landmarks' : (L.kind || 'city');
+  const KIND_LABEL = { famous: 'Famous track', tracks: 'Track', landmarks: 'Landmark', city: 'City', nature: 'Nature' };
+  const FILTERS = [['all', 'All'], ['famous', 'Famous tracks'], ['tracks', 'Tracks'], ['landmarks', 'Landmarks'], ['city', 'City'], ['nature', 'Nature']];
+  const inFilter = (L, f) => f === 'all' || (f === 'tracks' ? (L.track || L.plate) : kindOf(L) === f);
+  const ORDER = { famous: 0, landmarks: 1, tracks: 2, city: 3, nature: 4 };
+  let filt = localStorage.getItem('halide.sceneFilter') || 'all', sortBy = localStorage.getItem('halide.sceneSort') || 'featured';
+  if (!FILTERS.some(([k]) => k === filt)) filt = 'all';
+  const chips = $('#menu .m-chips'), sortSel = $('#menu .m-sort'); sortSel.value = sortBy;
+  for (const [k, label] of FILTERS) {
+    const n = LOCATIONS.filter(L => inFilter(L, k)).length;
+    const b = document.createElement('button'); b.className = 'chip'; b.dataset.f = k; b.setAttribute('role', 'tab'); b.innerHTML = `${label}<span>${n}</span>`;
+    b.onclick = () => { filt = k; localStorage.setItem('halide.sceneFilter', k); layoutMenu(); }; chips.appendChild(b);
+  }
+  sortSel.onchange = () => { sortBy = sortSel.value; localStorage.setItem('halide.sceneSort', sortBy); layoutMenu(); };
+  const cardsById = {};
   for (const L of LOCATIONS) {
-    const c = document.createElement('button'); c.className = 'card'; c.dataset.id = L.id;
-    c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg?v=place2"><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
+    const c = document.createElement('button'); c.className = 'card'; c.dataset.id = L.id; const k = kindOf(L);
+    c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg?v=place3"><em class="badge b-${k}">${KIND_LABEL[k]}</em><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
     c.onclick = async () => {
       // hide the old scene while the new one loads, so a slow phone never shows the previous place under the new name
-      document.body.classList.remove('in-menu'); document.body.classList.add('scene-loading'); $('#sceneLoad').textContent = `Loading ${L.name}…`;
+      document.body.classList.remove('in-menu'); showLoader(L); document.body.classList.add('scene-loading');
       const want = L.id; state.loc = want; resetScene(); showScene();
       try { await setLocation(want); } finally { if (state.loc === want) { await new Promise(r => { const t0 = performance.now(); (function w() { if (window.__hi || performance.now() - t0 > 8000 || state.loc !== want) r(); else setTimeout(w, 100); })(); }); } }
       if (state.loc === want) document.body.classList.remove('scene-loading'); showScene(); syncAll();
     };
-    grid.appendChild(c);
+    cardsById[L.id] = c;
+  }
+  function layoutMenu() {
+    for (const b of chips.children) b.classList.toggle('on', b.dataset.f === filt);
+    const idx = new Map(LOCATIONS.map((L, i) => [L.id, i]));
+    const list = LOCATIONS.filter(L => inFilter(L, filt)).sort(sortBy === 'az' ? (a, b) => a.name.localeCompare(b.name) : (a, b) => (ORDER[kindOf(a)] - ORDER[kindOf(b)]) || (idx.get(a.id) - idx.get(b.id)));
+    grid.replaceChildren(...list.map(L => cardsById[L.id]));
+  }
+  layoutMenu();
+  function showLoader(L) {
+    const el = $('#sceneLoad'); el.querySelector('.sl-bg').style.backgroundImage = `url("${BASE}assets/thumbs/${L.id}.jpg?v=place3")`;
+    el.querySelector('.sl-kind').textContent = KIND_LABEL[kindOf(L)]; el.querySelector('.sl-name').textContent = L.name; el.querySelector('.sl-place').textContent = L.place;
+    el.querySelector('.sl-credit').textContent = L.credit || '';
   }
   function showScene() { const L = LOCATIONS.find(l => l.id === state.loc); $('#sceneName').innerHTML = `<b>${L.name}</b> ${L.place}${L.credit ? ` <small class="credit">${L.credit}</small>` : ''}`; }
   showScene();
-  $('#scenesBtn').onclick = () => { for (const c of grid.children) c.classList.toggle('cur', c.dataset.id === state.loc); document.body.classList.add('in-menu'); };
+  $('#scenesBtn').onclick = () => { for (const c of Object.values(cardsById)) c.classList.toggle('cur', c.dataset.id === state.loc); document.body.classList.add('in-menu'); };
   if (!new URLSearchParams(location.search).has('loc')) document.body.classList.add('in-menu');
 
   // ---------- control builders ----------
@@ -312,7 +340,7 @@ export function buildUI(api) {
   // reopen the photo's exact setup (place, cars, paint, camera, effects). Shooting again keeps the original and adds a new photo.
   viewer.querySelector('.v-edit').onclick = async () => {
     if (!viewing?.scene) return; const snap = viewing.scene, L = LOCATIONS.find(l => l.id === snap.state.loc);
-    closeShot(); closeGallery(); document.body.classList.remove('in-menu'); document.body.classList.add('scene-loading'); $('#sceneLoad').textContent = `Loading ${L?.name ?? 'setup'}…`;
+    closeShot(); closeGallery(); document.body.classList.remove('in-menu'); document.body.classList.add('scene-loading'); if (L) showLoader(L);
     try { await restoreScene(snap); toast('Setup reopened. Shoot again to add a new photo'); }
     catch (e) { console.error(e); toast('Could not reopen that setup'); }
     document.body.classList.remove('scene-loading'); showScene(); syncAll();
