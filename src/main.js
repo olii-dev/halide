@@ -145,10 +145,25 @@ function normaliseModel(src, cfg) {
   inner.scale.multiplyScalar(cfg.length / size.z); root.updateMatrixWorld(true);
   box = new THREE.Box3().setFromObject(root, true); const ctr = box.getCenter(new THREE.Vector3());
   inner.position.x -= ctr.x; inner.position.z -= ctr.z; root.updateMatrixWorld(true); box = new THREE.Box3().setFromObject(root, true);
-  const H = box.max.y - box.min.y, found = [];
-  src.traverse(o => { if (!o.isMesh && o.children.some(c => c.isMesh && cfg.tire.includes(c.material.name))) found.push(o); });
-  const wheels = found.map(o => ({ o, c: new THREE.Box3().setFromObject(o, true).getCenter(new THREE.Vector3()) })).filter(w => w.c.y < box.min.y + 0.4 * H);
-  for (const w of wheels) w.o.name = `Wheel${w.c.z > 0 ? 'Front' : 'Rear'}${w.c.x > 0 ? 'L' : 'R'}`;
+  const H = box.max.y - box.min.y;
+  const corner = c => `Wheel${c.z > 0 ? 'Front' : 'Rear'}${c.x > 0 ? 'L' : 'R'}`;
+  if (cfg.spin) {
+    // tyre, rim, disc and caliper are loose siblings in the source: gather each corner into one group.
+    // spin parts go in as-is; fixed parts (calipers) get a BrakePad name so they steer but don't spin.
+    const tyres = [], parts = [], isPart = n => cfg.tire.includes(n) || cfg.spin.includes(n) || (cfg.fixed || []).includes(n);
+    src.traverse(o => { if (!o.isMesh) return; if (cfg.tire.includes(o.material.name)) tyres.push(o); if (isPart(o.material.name)) parts.push(o); });
+    const cents = tyres.map(o => new THREE.Box3().setFromObject(o, true).getCenter(new THREE.Vector3())).filter(c => c.y < box.min.y + 0.4 * H);
+    const groups = cents.map(c => { const g = new THREE.Group(); g.name = corner(c); g.position.copy(c); root.add(g); return g; });
+    root.updateMatrixWorld(true);
+    parts.forEach((o, i) => { const c = new THREE.Box3().setFromObject(o, true).getCenter(new THREE.Vector3());
+      let best = -1, bd = 0.6; cents.forEach((w, k) => { const d = w.distanceTo(c); if (d < bd) { bd = d; best = k; } });
+      if (best < 0) return; groups[best].attach(o); if ((cfg.fixed || []).includes(o.material.name)) o.name = `BrakePad_${i}`; });
+  } else {
+    const found = [];
+    src.traverse(o => { if (!o.isMesh && o.children.some(c => c.isMesh && cfg.tire.includes(c.material.name))) found.push(o); });
+    const wheels = found.map(o => ({ o, c: new THREE.Box3().setFromObject(o, true).getCenter(new THREE.Vector3()) })).filter(w => w.c.y < box.min.y + 0.4 * H);
+    for (const w of wheels) w.o.name = corner(w.c);
+  }
   const paint = new Set(cfg.paint);
   src.traverse(o => { if (o.isMesh && paint.has(o.material.name)) o.material.name = 'Paint 1'; });
   return root;
