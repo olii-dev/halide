@@ -8,7 +8,7 @@ const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.
 
 // GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
 export function buildUI(api) {
-  const { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES } = api;
+  const { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById } = api;
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
@@ -102,7 +102,7 @@ export function buildUI(api) {
   function frameNote() { toast(`Car ${activeIndex() + 1} added`); }
   syncs.push(() => {
     if (carsBox.children.length !== cars.length) { carsBox.innerHTML = ''; cars.forEach((c, i) => { const b = document.createElement('button'); b.onclick = () => { selectCar(i); changed(); }; carsBox.appendChild(b); }); }
-    [...carsBox.children].forEach((b, i) => { b.classList.toggle('on', i === activeIndex()); b.innerHTML = `<i style="background:${cars[i].s.color || PAINTS.find(p => p.id === cars[i].s.paint).color}"></i>Car ${i + 1}`; });
+    [...carsBox.children].forEach((b, i) => { b.classList.toggle('on', i === activeIndex()); b.innerHTML = `<i style="background:${cars[i].s.color || paintById(cars[i].s.paint).color}"></i>Car ${i + 1}`; });
     const [add, dup, rem] = carBtns.children; add.disabled = dup.disabled = cars.length >= MAX_CARS; rem.disabled = cars.length <= 1;
   });
   section('car', 'Position');
@@ -123,14 +123,24 @@ export function buildUI(api) {
   seg({ label: 'Headlights', options: [{ id: 'off', name: 'Off' }, { id: 'on', name: 'On' }, { id: 'high', name: 'High beam' }], get: () => carS.lights, set: v => { carS.lights = v; applyLights(); } });
   toggle({ label: 'Brake lights', get: () => carS.brake, set: v => { carS.brake = v; applyLights(); } });
   section('car', 'Paint');
+  // factory colours for the selected model (period names and codes), then the Halide palette + custom
+  const flab = document.createElement('div'); flab.className = 'plabel'; cur.appendChild(flab);
+  const fsw = document.createElement('div'); fsw.className = 'swatches'; cur.appendChild(fsw);
+  const hlab = document.createElement('div'); hlab.className = 'plabel'; hlab.textContent = 'Halide colours'; cur.appendChild(hlab);
   const sw = document.createElement('div'); sw.className = 'swatches'; cur.appendChild(sw);
-  for (const P of PAINTS) { const b = document.createElement('button'); b.className = 'swatch'; b.style.background = P.color; b.title = P.name; b.dataset.id = P.id;
-    b.onclick = () => { carS.color = null; setPaint(P.id); changed(); }; sw.appendChild(b); }
+  const swatch = (P, box) => { const b = document.createElement('button'); b.className = 'swatch' + (P.type && P.type !== 'solid' || P.metalness > 0.5 ? ' met' : ''); b.style.background = P.color;
+    b.title = P.code ? `${P.name} (${P.code})` : P.name; b.dataset.id = P.id; b.onclick = () => { carS.color = null; setPaint(P.id); changed(); }; box.appendChild(b); };
+  for (const P of PAINTS) swatch(P, sw);
+  let fModel = null;
   const pick = document.createElement('label'); pick.className = 'swatch custom'; pick.title = 'Custom colour'; pick.innerHTML = '<input type="color">'; sw.appendChild(pick);
   const cin = pick.querySelector('input'); cin.oninput = () => { carS.color = cin.value; applyPaint(); changed(); };
   const pname = document.createElement('div'); pname.className = 'pname'; cur.appendChild(pname);
-  syncs.push(() => { for (const b of sw.querySelectorAll('button')) b.classList.toggle('on', !carS.color && b.dataset.id === carS.paint); pick.classList.toggle('on', !!carS.color);
-    if (carS.color) pick.style.background = carS.color; pname.textContent = carS.color ? `Custom ${carS.color.toUpperCase()}` : PAINTS.find(p => p.id === carS.paint).name; });
+  syncs.push(() => {
+    if (fModel !== carS.model) { fModel = carS.model; fsw.innerHTML = ''; const list = FACTORY_PAINTS[carS.model] || []; const m = MODELS.find(x => x.id === carS.model);
+      flab.textContent = list.length ? `Factory colours · ${m?.name || ''}` : ''; flab.style.display = fsw.style.display = list.length ? '' : 'none'; for (const P of list) swatch(P, fsw); }
+    for (const b of [...sw.querySelectorAll('button'), ...fsw.querySelectorAll('button')]) b.classList.toggle('on', !carS.color && b.dataset.id === carS.paint); pick.classList.toggle('on', !!carS.color);
+    if (carS.color) pick.style.background = carS.color; const P = paintById(carS.paint);
+    pname.textContent = carS.color ? `Custom ${carS.color.toUpperCase()}` : P.code ? `${P.name} · ${P.code}` : P.name; });
   seg({ label: 'Finish', wrap: true, options: FINISHES, get: () => carS.finish, set: v => { carS.finish = v; applyPaint(); } });
   section('car', 'Drag on the photo');
   seg({ note: 'off = dragging never moves anything', options: [{ id: 'off', name: 'Off' }, { id: 'rotate', name: 'Rotates car' }, { id: 'move', name: 'Moves car' }], get: () => state.dragMode, set: v => { state.dragMode = v; } , label: 'Drag' });

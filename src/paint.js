@@ -24,6 +24,15 @@ function flakeTexture(size = 512) {
 }
 const FLAKE = flakeTexture();
 
+import { ALL_FACTORY } from './factory-paints.js';
+// surface recipe for factory colours by paint type
+const TYPE = {
+  solid:    { metalness: 0.02, roughness: 0.42, flake: 0, clearRough: 0.012 },
+  metallic: { metalness: 0.85, roughness: 0.32, flake: 0.5, clearRough: 0.03 },
+  pearl:    { metalness: 0.3, roughness: 0.3, flake: 0.3, clearRough: 0.025, iridescence: 0.35 },
+  // tintcoat: tinted clear over a bright metallic base, so it reads deep in shade and bright in the highlight
+  tintcoat: { metalness: 0.92, roughness: 0.26, flake: 0.55, clearRough: 0.02 },
+};
 export const PAINTS = [
   { id: 'rosso', name: 'Rosso Candy', color: '#8a0410', metalness: 0.9, roughness: 0.35, flake: 0.5 },
   { id: 'silver', name: 'Liquid Silver', color: '#b9bcbf', metalness: 0.9, roughness: 0.28, flake: 0.45 },
@@ -33,6 +42,14 @@ export const PAINTS = [
   { id: 'solar', name: 'Solar Orange', color: '#d2480a', metalness: 0.35, roughness: 0.3, flake: 0.35 },
   { id: 'graphite', name: 'Satin Graphite', color: '#2a2b2d', metalness: 0.65, roughness: 0.55, flake: 0.3, clearRough: 0.35 },
   { id: 'gloss', name: 'Gloss Black', color: '#040404', metalness: 0.0, roughness: 0.45, flake: 0.0, clearRough: 0.012 },
+  { id: 'chalk', name: 'Chalk', color: '#d9d5c9', metalness: 0.02, roughness: 0.42, flake: 0, clearRough: 0.012 },
+  { id: 'flatgrey', name: 'Flat Grey', color: '#7b7e80', metalness: 0.02, roughness: 0.42, flake: 0, clearRough: 0.015 },
+  { id: 'lime', name: 'Acid Lime', color: '#8fc31f', metalness: 0.3, roughness: 0.32, flake: 0.3 },
+  { id: 'yellow', name: 'Signal Yellow', color: '#f0b400', metalness: 0.02, roughness: 0.42, flake: 0, clearRough: 0.012 },
+  { id: 'babyblue', name: 'Powder Blue', color: '#8fbfe0', metalness: 0.02, roughness: 0.42, flake: 0, clearRough: 0.012 },
+  { id: 'violet', name: 'Violet Candy', color: '#3a1450', metalness: 0.85, roughness: 0.3, flake: 0.55 },
+  { id: 'bronze', name: 'Liquid Bronze', color: '#6b4a2b', metalness: 0.9, roughness: 0.3, flake: 0.5 },
+  { id: 'teal', name: 'Deep Teal', color: '#0f3d40', metalness: 0.8, roughness: 0.3, flake: 0.5 },
 ];
 
 // finish presets override the paint's own surface (colour stays)
@@ -45,7 +62,8 @@ export const FINISHES = [
   { id: 'matte', name: 'Matte', metalness: 0.25, roughness: 0.72, flake: 0, clearcoat: 0, iridescence: 0 },
 ];
 export function resolvePaint(presetId, finishId, color) {
-  const p = PAINTS.find(x => x.id === presetId) || PAINTS[0];
+  const fp = ALL_FACTORY.find(x => x.id === presetId);
+  const p = fp ? { ...TYPE[fp.type], ...fp } : (PAINTS.find(x => x.id === presetId) || PAINTS[0]);
   const f = FINISHES.find(x => x.id === finishId);
   const out = { ...p, ...(f && f.id !== 'paint' ? f : {}), id: p.id, name: p.name };
   if (color) out.color = color;
@@ -80,3 +98,5 @@ export function plateTexture(text = 'HALIDE') {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
 }
+
+export function paintById(id) { return ALL_FACTORY.find(x => x.id === id) || PAINTS.find(x => x.id === id) || PAINTS[0]; }

@@ -6,7 +6,8 @@ import { Ground } from './ground.js';
 import { Post } from './post.js';
 import { LOCATIONS, bearingFromU, MAX_FOCAL } from './locations.js';
 import { MODELS } from './cars.js';
-import { PAINTS, FINISHES, makePaint, resolvePaint, plateTexture } from './paint.js';
+import { PAINTS, FINISHES, makePaint, resolvePaint, plateTexture, paintById } from './paint.js';
+import { FACTORY_PAINTS } from './factory-paints.js';
 import { buildUI } from './ui.js';
 
 const q = new URLSearchParams(location.search);
@@ -525,7 +526,7 @@ await Promise.all([setLocation(state.loc), loadTemplate('concept').then(t => { t
 if (q.get('car') && q.get('car') !== 'concept') { const t = await loadTemplate(q.get('car')).catch(() => null); if (t) templates[q.get('car')].ready = t; }
 addCar(q.get('car') && templates[q.get('car')]?.ready ? { ...defaultCar(), model: q.get('car') } : null);
 resize(); frame();
-ui = buildUI({ snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES });
+ui = buildUI({ snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
 function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
