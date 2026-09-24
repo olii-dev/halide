@@ -214,3 +214,15 @@ body.in-gallery #panel, body.in-gallery #shutter { opacity: 0; pointer-events: n
 #sceneLoad { position: fixed; inset: 0; display: none; place-items: center; font-size: 15px; letter-spacing: .04em; color: #fff; background: #0b0b0c; z-index: 40; pointer-events: none; }
 body.scene-loading #sceneLoad { display: grid; }
 #menu .card.cur { outline: 2px solid #fff; outline-offset: -2px; }
+
+/* model picker cards */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.card { position: relative; padding: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #0f0f0f; text-align: left; color: var(--ink); cursor: pointer; transition: border-color .2s, transform .15s; }
+.card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; opacity: .8; transition: opacity .2s; }
+.card span { display: block; padding: 6px 9px 8px; }
+.card b { display: block; font-size: 12px; font-weight: 600; line-height: 1.25; }
+.card small { display: block; font-size: 10.5px; color: var(--dim); margin-top: 2px; letter-spacing: .02em; }
+.card:hover img { opacity: 1; }
+.card.on { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber) inset; }
+.card.on img { opacity: 1; }
+.card.loading::after { content: 'Loading…'; position: absolute; top: 8px; right: 8px; font-size: 10px; padding: 3px 7px; border-radius: 99px; background: rgba(0,0,0,.6); color: var(--amber); }

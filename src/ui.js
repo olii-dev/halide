@@ -62,6 +62,17 @@ export function buildUI(api) {
     const sync = () => { for (const b of box.children) b.classList.toggle('on', String(o.get()) === b.dataset.id); };
     syncs.push(sync); sync(); cur.appendChild(w); return w;
   }
+  // GT7-style model picker: a grid of cards, each a studio render of the car with its full name
+  function carCards(o) {
+    const w = document.createElement('div'); w.className = 'ctl';
+    w.innerHTML = `<div class="top"><label>${o.label}</label></div><div class="cards"></div>`;
+    const box = w.querySelector('.cards');
+    for (const opt of o.options) { const b = document.createElement('button'); b.className = 'card'; b.dataset.id = opt.id;
+      b.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/carthumbs/${opt.id}.jpg?v=1"><span><b>${opt.name}</b><small>${opt.sub}</small></span>`;
+      b.onclick = () => { o.set(opt.id); changed(); }; box.appendChild(b); }
+    const sync = () => { const v = String(o.get()); for (const b of box.children) { b.classList.toggle('on', v === b.dataset.id); b.classList.toggle('loading', v === b.dataset.id && v !== String(carS.model)); } };
+    syncs.push(sync); sync(); cur.appendChild(w); return w;
+  }
   function buttons(list) { const w = document.createElement('div'); w.className = 'btns';
     for (const [name, fn] of list) { const b = document.createElement('button'); b.textContent = name; b.onclick = () => { fn(); changed(); }; w.appendChild(b); }
     cur.appendChild(w); return w; }
@@ -81,7 +92,7 @@ export function buildUI(api) {
   ]);
   // model picker: swap the selected car for another model, keeping its spot, paint and settings
   let loadingModel = null;
-  seg({ label: 'Model', options: MODELS.map(m => ({ id: m.id, name: m.year ? `${m.name.replace(/ \(.*\)/, '')} '${String(m.year).slice(2)}` : m.name })),
+  carCards({ label: 'Model', options: MODELS.map(m => ({ id: m.id, name: m.name.replace(/ \(.*\)/, ''), sub: m.year ? `${m.year}${/\((.*)\)/.test(m.name) ? ' · ' + m.name.match(/\((.*)\)/)[1] : ''}` : 'Halide original' })),
     get: () => loadingModel ?? carS.model,
     set: id => { if (id === carS.model || loadingModel) return; loadingModel = id; toast('Loading car…');
       const c = cars[activeIndex()];
