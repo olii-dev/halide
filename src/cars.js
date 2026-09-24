@@ -12,4 +12,6 @@ export const MODELS = [
     credit: '"Honda NSX 1990" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/honda-nsx-1990-1cc15628a00a4739a6b6c01128927c8d' },
   { id: 'sl300', name: 'Mercedes-Benz 300 SL Gullwing', year: 1954, file: 'sl300.glb', tire: ['tire'], merged: ['chrome', 'mid-chrome', 'black'], paint: ['main_color'], hide: [], length: 4.52, front: '+z',
     credit: '"Mercedes-Benz 300 SL Gullwing" by Lexyc16, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/mercedes-benz-300-sl-gullwing-505241c829c540a4921533000736904e' },
+  { id: 'c8', name: 'Chevrolet Corvette C8 Stingray', year: 2019, file: 'c8.glb', tire: ['Tire_Treads'], paint: ['Body_Color'], hide: [], length: 4.63, front: '-z',
+    credit: '"2019 Chevrolet Corvette C8 Stingray" by Hari, CC-BY-4.0', url: 'https://sketchfab.com/3d-models/2019-chevrolet-corvette-c8-stingray-790c40ccff6843eab0b7b4bd18421ff8' },
 ];
