@@ -110,7 +110,8 @@ export async function setLocation(id, { keepCar = false } = {}) {
   renderer.shadowMap.needsUpdate = true; markDirty();
   sun.visible = info.hasSun; sun.shadow.radius = 10 * (L.soft ?? 1); sun.shadow.blurSamples = L.soft ? 32 : 20;
   sun.color.setRGB(info.sunColor.x, info.sunColor.y, info.sunColor.z, THREE.LinearSRGBColorSpace);
-  const boost = L.boost ?? 1; sun.intensity = info.sunIntensity * boost * (L.sunScale ?? 1); // sunScale: low sun fries solid diffuse paint into AgX salmon; golden-hour scenes run the sun lower scene.environmentIntensity = boost; sunDir.copy(info.sunDir); // boost: some plates sit under a brighter sky than the light HDRI (Suzuka overcast)
+  const boost = L.boost ?? 1; sun.intensity = info.sunIntensity * boost * (L.sunScale ?? 1); // sunScale: low sun fries solid diffuse paint into AgX salmon; golden-hour scenes run the sun lower
+  scene.environmentIntensity = boost; sunDir.copy(info.sunDir); // boost: some plates sit under a brighter sky than the light HDRI (Suzuka overcast)
   sunShare = info.sunShare; for (const c of cars) c.ground.sunShare = sunShare;
   { // haze light for this place: average sky radiance + sun radiance, tinted toward the local dust (luminance kept)
     const dc = new THREE.Color(L.dust || '#8f877c'), Y = 0.2126 * dc.r + 0.7152 * dc.g + 0.0722 * dc.b;
