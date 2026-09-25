@@ -15,12 +15,15 @@ export function buildUI(api) {
   // GT7-style scene browser: filter chips + sort; each card carries its type badge
   const kindOf = L => L.plate ? 'famous' : L.track ? 'tracks' : L.iconic ? 'landmarks' : (L.kind || 'city');
   const KIND_LABEL = { famous: 'Famous track', tracks: 'Track', landmarks: 'Landmark', city: 'City', nature: 'Nature' };
-  const FILTERS = [['all', 'All'], ['famous', 'Famous tracks'], ['tracks', 'Tracks'], ['landmarks', 'Landmarks'], ['city', 'City'], ['nature', 'Nature']];
-  const inFilter = (L, f) => f === 'all' || (f === 'tracks' ? (L.track || L.plate) : kindOf(L) === f);
+  const FILTERS = [['all', 'All'], ['favs', '★ Starred'], ['famous', 'Famous tracks'], ['tracks', 'Tracks'], ['landmarks', 'Landmarks'], ['city', 'City'], ['nature', 'Nature']];
+  const favs = new Set(JSON.parse(localStorage.getItem('halide.favs') || '[]'));
+  const saveFavs = () => localStorage.setItem('halide.favs', JSON.stringify([...favs]));
+  const inFilter = (L, f) => f === 'favs' ? favs.has(L.id) : f === 'all' || (f === 'tracks' ? (L.track || L.plate) : kindOf(L) === f);
   const ORDER = { famous: 0, landmarks: 1, tracks: 2, city: 3, nature: 4 };
   let filt = localStorage.getItem('halide.sceneFilter') || 'all', sortBy = localStorage.getItem('halide.sceneSort') || 'featured';
   if (!FILTERS.some(([k]) => k === filt)) filt = 'all';
   const chips = $('#menu .m-chips'), sortSel = $('#menu .m-sort'); sortSel.value = sortBy;
+  const updateCounts = () => { for (const b of chips.children) b.querySelector('span').textContent = LOCATIONS.filter(L => inFilter(L, b.dataset.f)).length; };
   for (const [k, label] of FILTERS) {
     const n = LOCATIONS.filter(L => inFilter(L, k)).length;
     const b = document.createElement('button'); b.className = 'chip'; b.dataset.f = k; b.setAttribute('role', 'tab'); b.innerHTML = `${label}<span>${n}</span>`;
@@ -30,7 +33,11 @@ export function buildUI(api) {
   const cardsById = {};
   for (const L of LOCATIONS) {
     const c = document.createElement('button'); c.className = 'card'; c.dataset.id = L.id; const k = kindOf(L);
-    c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg?v=place3"><em class="badge b-${k}">${KIND_LABEL[k]}</em><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
+    c.innerHTML = `<img alt="" loading="lazy" src="${BASE}assets/thumbs/${L.id}.jpg?v=place3"><em class="badge b-${k}">${KIND_LABEL[k]}</em><span class="star" role="button" aria-label="star scene">★</span><span class="lbl"><b>${L.name}</b><small>${L.place}</small></span>`;
+    const star = c.querySelector('.star');
+    star.classList.toggle('on', favs.has(L.id));
+    star.onclick = e => { e.stopPropagation(); favs.has(L.id) ? favs.delete(L.id) : favs.add(L.id); saveFavs();
+      star.classList.toggle('on', favs.has(L.id)); updateCounts(); if (filt === 'favs') layoutMenu(); };
     c.onclick = async () => {
       // hide the old scene while the new one loads, so a slow phone never shows the previous place under the new name
       document.body.classList.remove('in-menu'); showLoader(L); document.body.classList.add('scene-loading');

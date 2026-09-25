@@ -260,3 +260,8 @@ body.scene-loading #sceneLoad { display: grid; }
 .plate-in { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: #eee; font: 700 18px/1.2 "Helvetica Neue", Arial, sans-serif; letter-spacing: .18em; text-align: center; text-transform: uppercase; padding: 10px 12px; outline: none; }
 .plate-in:focus { border-color: rgba(255,255,255,.4); }
 .plate-in:disabled { opacity: .35; }
+
+/* star toggle on scene cards (favourites) */
+.card .star { position: absolute; top: 6px; right: 8px; z-index: 2; font-size: 17px; line-height: 1; color: rgba(255,255,255,.85); text-shadow: 0 1px 3px rgba(0,0,0,.8); opacity: .45; cursor: pointer; padding: 2px; }
+.card .star:hover { opacity: .9; }
+.card .star.on { opacity: 1; color: #ffc94d; }
