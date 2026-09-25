@@ -33,6 +33,7 @@ export const state = {
   focal: Math.min(+(q.get('f') ?? 50), MAX_FOCAL), fstop: +(q.get('n') ?? 2.8), ev: +(q.get('ev') ?? 0), grain: +(q.get('grain') ?? 0.3), speed: +(q.get('kmh') ?? 0), previewSamples: +(q.get('ps') ?? 6),
   shutter: 60, vignette: 0.3, ca: +(q.get('ca') ?? 0.2), focus: 8, focusMode: 'car', dof: q.get('dof') !== '0', loc: q.get('loc') ?? LOCATIONS[0].id,
   haze: +(q.get('haze') ?? 0), bloom: 1, contrast: 1, saturation: 1, temp: 0, tint: 0, look: 'none', panBlur: false, aspect: 'free', grid: 'off', dragMode: 'off', dollyZoom: false,
+  mood: 'shot',
 };
 camera.setFocalLength(state.focal);
 const STATE0 = { ...state }, CAMH0 = +(q.get('h') ?? 1.1);
@@ -56,6 +57,7 @@ let dirty = true, lastChange = 0, hiDone = false, lastSig = '';
 export function markDirty() { dirty = true; }
 function setShadowSize(n) { if (sun.shadow.mapSize.x === n) return; sun.shadow.mapSize.setScalar(n); sun.shadow.map?.dispose(); sun.shadow.map = null; }
 let sunShare = 0.6;
+let baseLight = null, baseSkyWhite = 1, basePlateWhite = 1;
 const backdropMeta = fetch(`${BASE}assets/backdrop/backdrops.json`).then(r => r.json()).catch(() => ({}));
 let sky = null, template = null, carRadius = 3;
 // Backplates: a flat photo of a real place (famous circuits) drawn behind everything. The camera is locked to the
@@ -72,12 +74,12 @@ const invAgX = (() => {
   const t = new THREE.DataTexture(lut, N, 1, THREE.RGBAFormat, THREE.FloatType); t.magFilter = t.minFilter = THREE.LinearFilter; t.needsUpdate = true; return t;
 })();
 const plate = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
-  uniforms: { map: { value: null }, lut: { value: invAgX }, white: { value: 1 }, sat: { value: 1.25 }, uvS: { value: new THREE.Vector2(1, 1) } },
+  uniforms: { map: { value: null }, lut: { value: invAgX }, white: { value: 1 }, sat: { value: 1.25 }, tint: { value: new THREE.Vector3(1, 1, 1) }, uvS: { value: new THREE.Vector2(1, 1) } },
   vertexShader: `uniform vec2 uvS; varying vec2 vUv; void main(){ vUv = 0.5 + (uv - 0.5) * uvS; gl_Position = vec4(position.xy, 0.99999, 1.); }`,
-  fragmentShader: `uniform sampler2D map, lut; uniform float white, sat; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D map, lut; uniform float white, sat; uniform vec3 tint; varying vec2 vUv;
     float inv(float v){ return texture2D(lut, vec2(v * (1023.0 / 1024.0) + 0.5 / 1024.0, 0.5)).r; }
     void main(){ vec3 v = texture2D(map, vUv).rgb; vec3 c = vec3(inv(v.r), inv(v.g), inv(v.b));
-      float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = max(mix(vec3(l), c, sat), 0.0); gl_FragColor = vec4(c * white, 1.); }`,
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c = max(mix(vec3(l), c, sat), 0.0); gl_FragColor = vec4(c * white * tint, 1.); }`,
   depthWrite: false, depthTest: false,
 }));
 plate.frustumCulled = false; plate.renderOrder = -2; plate.visible = false; scene.add(plate);
@@ -93,11 +95,12 @@ const plateView = L => { // full-photo vertical fov, the screen's share of it (c
 export function resetScene() {
   const loc = state.loc; Object.assign(state, STATE0, { loc }); rig.camH = CAMH0; camera.setFocalLength(state.focal);
   const d = defaultCar(); cars.forEach((c, i) => { Object.assign(c.s, { lat: i ? (i % 2 ? 3.2 : -3.2) * Math.ceil(i / 2) : 0, near: d.near, rot: d.rot, steer: 0, brake: false }); });
-  rebake(); renderer.shadowMap.needsUpdate = true; markDirty();
+  applyMood(); renderer.shadowMap.needsUpdate = true; markDirty();
 }
 export async function setLocation(id, { keepCar = false } = {}) {
   const L = LOCATIONS.find(l => l.id === id) || LOCATIONS[0];
   state.loc = L.id; dustColor.value.set(L.dust || '#8f877c');
+  baseSkyWhite = 1; basePlateWhite = 1;
   const hdr = await loadHDR(`${BASE}assets/hdri/${L.light || L.id}_2k.hdr`);
   if (state.loc !== L.id) return;
   const info = analyse(hdr, { noSun: L.sun === false });
@@ -119,18 +122,20 @@ export async function setLocation(id, { keepCar = false } = {}) {
     const sunRad = info.hasSun ? new THREE.Vector3(info.sunColor.x, info.sunColor.y, info.sunColor.z).multiplyScalar(info.sunIntensity) : new THREE.Vector3();
     const env = { sunDir: info.sunDir.clone(), sunRad, skyRad: info.skyE.clone().multiplyScalar(1 / Math.PI).addScalar(info.groundL), tint };
     post.env = postLo.env = env;
+    baseLight = { sunCol: new THREE.Vector3(info.sunColor.x, info.sunColor.y, info.sunColor.z), sunI: sun.intensity, hasSun: info.hasSun, boost, env: { sunRad: env.sunRad.clone(), skyRad: env.skyRad.clone() } };
   }
   rig.base0 = bearingFromU(L.u); if (!keepCar) { rig.sceneAngle = 0; rig.pan = 0; rig.tilt = 0; rig.roll = 0; if (active) frame(); }
   window.__env = { id: L.id, hasSun: info.hasSun, sunShare: +info.sunShare.toFixed(3), sunDir: info.sunDir.toArray().map(v => +v.toFixed(3)), sunI: +info.sunIntensity.toFixed(1), skyE: +info.skyLum.toFixed(1), groundL: +info.groundL.toFixed(3),
     impliedAlbedo: +(Math.PI * info.groundL / (info.sunIntensity * Math.max(info.sunDir.y, 0) + info.skyLum)).toFixed(3) };
   console.log('env', JSON.stringify(window.__env));
+  if (state.mood !== 'shot') applyMood();
   window.__hi = false;
   // sharp backdrop: 8k LDR photo (4k on small GPUs / phones), HDR still lights the car
   if (L.plate) {
     Promise.all([backdropMeta, new THREE.TextureLoader().loadAsync(`${BASE}assets/plate/${L.id}.jpg`)]).then(([meta, tex]) => {
       if (state.loc !== L.id) { tex.dispose(); return; }
       tex.colorSpace = THREE.NoColorSpace; tex.generateMipmaps = true; tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); // raw display values: inverted in the shader
-      const u = plate.material.uniforms; u.map.value?.dispose(); u.map.value = tex; u.white.value = L.expo ?? 1;
+      const u = plate.material.uniforms; u.map.value?.dispose(); u.map.value = tex; u.white.value = basePlateWhite = L.expo ?? 1; gradePlate();
       plate.visible = true; { const v = plateView(L); camera.fov = THREE.MathUtils.radToDeg(v.svfov); camera.updateProjectionMatrix(); state.focal = +camera.getFocalLength().toFixed(1); } if (active) frame(); window.__hi = true; markDirty();
     });
     return;
@@ -139,7 +144,7 @@ export async function setLocation(id, { keepCar = false } = {}) {
   if (!q.has('lo')) Promise.all([backdropMeta, new THREE.TextureLoader().loadAsync(`${BASE}assets/backdrop/${L.id}_${big ? '8k' : '4k'}.jpg`)]).then(([meta, tex]) => {
     if (!(sky && state.loc === L.id)) { tex.dispose(); return; }
     tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); tex.generateMipmaps = true;
-    const old = sky.material.map; sky.material.map = tex; sky.material.color.setScalar(L.white ?? meta[L.id]?.white ?? 1) // L.white overrides the auto-exposure when the HDRI's bright spot misleads it (covered pit); sky.material.needsUpdate = true; old.dispose(); window.__hi = true; markDirty();
+    const old = sky.material.map; sky.material.map = tex; baseSkyWhite = L.white ?? meta[L.id]?.white ?? 1; gradeSky() // L.white overrides the auto-exposure when the HDRI's bright spot misleads it (covered pit); sky.material.needsUpdate = true; old.dispose(); window.__hi = true; markDirty();
   });
 }
 
@@ -151,11 +156,35 @@ export function applyPaint(c = active) {
 }
 export function applyDust(c = active) { c.dustU.value = c.s.dust ?? 0; markDirty(); }
 export function applyLights(c = active) {
-  const head = { off: 0, on: 1.6, high: 7 }[c.s.lights] ?? 1, tail = c.s.brake ? 2.2 : (c.s.lights === 'off' ? 0 : 1);
+  const lvl = state.mood === 'night' && c.s.lights === 'off' ? 'on' : c.s.lights; // night mood lights every car
+  const head = { off: 0, on: 1.6, high: 7 }[lvl] ?? 1, tail = c.s.brake ? 2.2 : (lvl === 'off' ? 0 : 1);
   for (const m of c.lightMats.head) m.emissiveIntensity = head * (m.userData.gain ?? 1);
   for (const m of c.lightMats.tail) m.emissiveIntensity = tail * (m.userData.gain ?? 1);
   markDirty();
 }
+
+
+// Light moods: grade the sun, environment and backdrop around the photo as shot.
+const MOODS = {
+  golden: { sunCol: [1.0, 0.62, 0.34], sunMix: 0.75, sunI: 0.85, envI: 0.9, envSun: 0.85, envSky: 0.95, skyTint: [1.0, 0.84, 0.6], plateW: 0.95, plateTint: [1.06, 0.9, 0.7] },
+  night: { sunCol: [0.55, 0.68, 1.0], sunMix: 1, sunI: 0.12, envI: 0.16, envSun: 0.1, envSky: 0.18, skyTint: [0.2, 0.27, 0.46], plateW: 0.16, plateTint: [0.5, 0.64, 1.0] },
+};
+function gradeSky() { if (!sky) return; const t = MOODS[state.mood]?.skyTint ?? [1, 1, 1]; sky.material.color.setRGB(baseSkyWhite * t[0], baseSkyWhite * t[1], baseSkyWhite * t[2]); }
+function gradePlate() { const u = plate.material.uniforms, m = MOODS[state.mood]; u.white.value = basePlateWhite * (m?.plateW ?? 1); u.tint.value.set(...(m?.plateTint ?? [1, 1, 1])); }
+export function applyMood() {
+  const m = MOODS[state.mood];
+  if (baseLight) {
+    const c = baseLight.sunCol.clone(); if (m) c.lerp(new THREE.Vector3(...m.sunCol), m.sunMix);
+    sun.color.setRGB(c.x, c.y, c.z, THREE.LinearSRGBColorSpace);
+    sun.intensity = baseLight.sunI * (m?.sunI ?? 1);
+    scene.environmentIntensity = baseLight.boost * (m?.envI ?? 1);
+    post.env = postLo.env = { ...post.env, sunRad: baseLight.env.sunRad.clone().multiplyScalar(m?.envSun ?? 1), skyRad: baseLight.env.skyRad.clone().multiplyScalar(m?.envSky ?? 1) };
+  }
+  gradeSky(); gradePlate();
+  for (const c of cars) applyLights(c);
+  rebake(); markDirty();
+}
+export function setMood(v) { if (state.mood === v) return; state.mood = v; applyMood(); }
 
 const templates = {};
 function loadTemplate(id = 'concept') { return templates[id] ??= prepTemplate(MODELS.find(m => m.id === id) || MODELS[0]); }
@@ -374,7 +403,7 @@ export async function restoreScene(snap) {
   active = null; snap.cars.slice(0, MAX_CARS).forEach(s => addCar({ ...s }));
   active = cars[snap.active] || cars[0];
   Object.assign(state, snap.state); Object.assign(rig, snap.rig); camera.setFocalLength(state.focal);
-  rebake(); renderer.shadowMap.needsUpdate = true; markDirty(); ui?.sync();
+  applyMood(); renderer.shadowMap.needsUpdate = true; markDirty(); ui?.sync();
   return true;
 }
 export function selectCar(i) { if (cars[i]) { active = cars[i]; markDirty(); } }
@@ -612,7 +641,7 @@ await Promise.all([setLocation(state.loc), loadTemplate('concept').then(t => { t
 if (q.get('car') && q.get('car') !== 'concept') { const t = await loadTemplate(q.get('car')).catch(() => null); if (t) templates[q.get('car')].ready = t; }
 addCar(q.get('car') && templates[q.get('car')]?.ready ? { ...defaultCar(), model: q.get('car') } : null);
 resize(); frame();
-ui = buildUI({ snapshotScene, setPlateText, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById });
+ui = buildUI({ snapshotScene, setPlateText, setMood, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
 function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
@@ -635,5 +664,5 @@ let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() =>
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { setPlateText, applyLights, applyDust, snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
+window.halide = { setPlateText, setMood, applyLights, applyDust, snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);
