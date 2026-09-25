@@ -255,3 +255,8 @@ body.scene-loading #sceneLoad { display: grid; }
 #menu .card .badge.b-landmarks { background: rgba(200,160,70,.85); color: #111; }
 @media (max-width: 820px) { #menu .m-bar { gap: 10px; } #menu .m-chips { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 4px; scrollbar-width: none; } #menu .chip { flex: none; } }
 @media (max-width: 820px) { #menu .card b { font-size: 12px; letter-spacing: .08em; overflow-wrap: anywhere; } #menu .card small { font-size: 10px; } #menu .card .badge { top: 7px; left: 7px; font-size: 8px; padding: 3px 6px; } }
+
+/* custom number plate input (CAR tab) */
+.plate-in { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); border-radius: 8px; color: #eee; font: 700 18px/1.2 "Helvetica Neue", Arial, sans-serif; letter-spacing: .18em; text-align: center; text-transform: uppercase; padding: 10px 12px; outline: none; }
+.plate-in:focus { border-color: rgba(255,255,255,.4); }
+.plate-in:disabled { opacity: .35; }

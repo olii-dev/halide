@@ -6,7 +6,7 @@ import { Ground } from './ground.js';
 import { Post } from './post.js';
 import { LOCATIONS, bearingFromU, MAX_FOCAL } from './locations.js';
 import { MODELS } from './cars.js';
-import { PAINTS, FINISHES, makePaint, resolvePaint, plateTexture, paintById } from './paint.js';
+import { PAINTS, FINISHES, makePaint, resolvePaint, plateTexture, drawPlate, paintById } from './paint.js';
 import { FACTORY_PAINTS } from './factory-paints.js';
 import { addDust, dustColor } from './dust.js';
 import { DustCloud } from './dustcloud.js';
@@ -280,13 +280,24 @@ function splitByZ(o, model, dir) {
 function buildCar(s) {
   const template = templates[s.model]?.ready;
   const model = template.clone(true), holder = new THREE.Group(); holder.add(model); scene.add(holder);
-  const c = { s, model, holder, paintSlots: [], lightMats: { head: [], tail: [] }, wheels: [], steers: [], noseSign: 1,
+  const c = { s, model, holder, paintSlots: [], lightMats: { head: [], tail: [] }, wheels: [], steers: [], noseSign: 1, plateTex: null,
     ground: new Ground(renderer, scene, { useSun: cars.length === 0 }) };
   c.ground.sunShare = sunShare;
   const lamps = [];
   model.traverse(o => {
     if (!o.isMesh) return; o.layers.enable(1); const n = o.material.name || '';
     if (/^Paint 1/.test(n)) c.paintSlots.push({ mesh: o, original: o.material });
+    const cfgP = MODELS.find(m => m.id === s.model) || {};
+    if (n === (cfgP.plateMat || 'License') && !cfgP.plateMesh) { o.material = o.material.clone(); const t = plateTexture(s.plateText || 'HALIDE'); t.flipY = false; o.material.map = t; o.material.needsUpdate = true; c.plateTex = t; }
+    if (cfgP.plateMesh && o.name === cfgP.plateMesh) { // plate inlay shares a plastic atlas: clone it out and give it flat 0-1 UVs (v=0 at the top, glTF style)
+      o.material = o.material.clone();
+      const pos = o.geometry.attributes.position, uv = o.geometry.attributes.uv;
+      let mnx = 9e9, mxx = -9e9, mny = 9e9, mxy = -9e9;
+      for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i); mnx = Math.min(mnx, x); mxx = Math.max(mxx, x); mny = Math.min(mny, y); mxy = Math.max(mxy, y); }
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) - mnx) / ((mxx - mnx) || 1), 1 - (pos.getY(i) - mny) / ((mxy - mny) || 1));
+      uv.needsUpdate = true;
+      const t = plateTexture(s.plateText || 'HALIDE', cfgP.plateAspect || 4); t.flipY = false;
+      o.material.map = t; o.material.needsUpdate = true; c.plateTex = t; }
     // lamps: the concept names them Headlight/Brakelight; licensed models list their lamp materials in cars.js
     const cfg = MODELS.find(m => m.id === s.model) || {};
     let isHead = n === 'Headlight' || cfg.head?.includes(n), isTail = n === 'Brakelight' || cfg.tail?.includes(n);
@@ -345,6 +356,14 @@ export function removeCar(c = active) {
   active = cars[Math.min(i, cars.length - 1)]; renderer.shadowMap.needsUpdate = true; markDirty();
 }
 // gallery: every photo keeps the exact setup it was shot with, so it can be reopened and reshot
+// custom number plate: redraw the active car's plate texture in place (per-car canvas, so duplicates stay independent)
+export function setPlateText(text) {
+  if (!active) return;
+  const t = (text || '').toUpperCase().replace(/[^A-Z0-9 \-]/g, '').slice(0, 10);
+  active.s.plateText = t;
+  if (active.plateTex) { drawPlate(active.plateTex.image.getContext('2d'), t || 'HALIDE'); active.plateTex.needsUpdate = true; }
+  markDirty();
+}
 export function snapshotScene() { return { v: 1, state: { ...state }, rig: { ...rig }, cars: cars.map(c => ({ ...c.s })), active: cars.indexOf(active) }; }
 export async function restoreScene(snap) {
   if (!snap?.cars?.length) return false;
@@ -592,7 +611,7 @@ await Promise.all([setLocation(state.loc), loadTemplate('concept').then(t => { t
 if (q.get('car') && q.get('car') !== 'concept') { const t = await loadTemplate(q.get('car')).catch(() => null); if (t) templates[q.get('car')].ready = t; }
 addCar(q.get('car') && templates[q.get('car')]?.ready ? { ...defaultCar(), model: q.get('car') } : null);
 resize(); frame();
-ui = buildUI({ snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById });
+ui = buildUI({ snapshotScene, setPlateText, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById });
 // Render on demand, GT7-style: a light preview while anything moves, then one
 // full-quality still once it settles. Nothing is drawn while the scene is idle.
 function signature() { return JSON.stringify([rig, cars.map(c => c.s), state, cars.indexOf(active)]) + VW() + 'x' + VH(); }
@@ -615,5 +634,5 @@ let bakeT = 0; function rebake() { clearTimeout(bakeT); bakeT = setTimeout(() =>
 const PERF = q.has('perf') ? (window.__perf = { lo: [], hi: [] }) : null;
 requestAnimationFrame(loop);
 document.body.classList.add('ready');
-window.halide = { applyLights, applyDust, snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
+window.halide = { setPlateText, applyLights, applyDust, snapshotScene, restoreScene, setCarModel, MODELS, resetScene, markDirty, state, rig, carS, cars, addCar, duplicateCar, removeCar, selectCar, exportPhoto, setLocation, setPaint, setFocal, frameCar, THREE, camera, sun, scene };
 setTimeout(() => { window.__ready = true; }, 500);

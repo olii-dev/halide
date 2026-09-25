@@ -8,7 +8,7 @@ const signed = (v, d = 1, u = '') => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.
 
 // GT7 Scapes-style: every property has its own control, nothing is tied to one drag.
 export function buildUI(api) {
-  const { snapshotScene, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById } = api;
+  const { snapshotScene, setPlateText, restoreScene, setCarModel, MODELS, resetScene, state, rig, carS, cars, MAX_CARS, addCar, duplicateCar, removeCar, selectCar, activeIndex, setLocation, setPaint, applyPaint, applyLights, applyDust, setFocal, exportPhoto, frameCar, carDistance, cropRect, markDirty, LOCATIONS, PAINTS, FINISHES, FACTORY_PAINTS, paintById } = api;
   const BASE = import.meta.env.BASE_URL, syncs = [];
   // ---------- scene menu ----------
   const grid = $('#menu .m-grid');
@@ -172,6 +172,14 @@ export function buildUI(api) {
   seg({ label: 'Finish', wrap: true, options: FINISHES, get: () => carS.finish, set: v => { carS.finish = v; applyPaint(); } });
   slider({ label: 'Dust cloud', min: 0, max: 100, step: 1, nudge: 5, get: () => Math.round((carS.kick ?? 0) * 100), set: v => { carS.kick = clamp(v, 0, 100) / 100; markDirty(); }, fmt: v => v ? (state.speed ? `${v}%` : `${v}% · needs wheel spin`) : 'off', clamp: v => clamp(v, 0, 100) });
   slider({ label: 'Road dust', min: 0, max: 100, step: 1, nudge: 5, get: () => Math.round((carS.dust ?? 0) * 100), set: v => { carS.dust = clamp(v, 0, 100) / 100; applyDust(); }, fmt: v => v ? `${v}%` : 'clean', clamp: v => clamp(v, 0, 100) });
+  section('car', 'Number plate');
+  const plateIn = document.createElement('input'); plateIn.className = 'plate-in'; plateIn.maxLength = 10; plateIn.placeholder = 'HALIDE'; plateIn.spellcheck = false; plateIn.autocomplete = 'off';
+  plateIn.oninput = () => { setPlateText(plateIn.value); markDirty(); };
+  cur.appendChild(plateIn);
+  const plateNote = document.createElement('p'); plateNote.className = 'note'; cur.appendChild(plateNote);
+  syncs.push(() => { const m = MODELS.find(x => x.id === carS.model); const ok = !!m?.plate;
+    plateIn.disabled = !ok; if (document.activeElement !== plateIn) plateIn.value = carS.plateText ?? '';
+    plateNote.textContent = ok ? 'Blank shows the Halide plate.' : `${m?.name || 'This car'} has no plate to write on.`; });
   section('car', 'Drag on the photo');
   seg({ note: 'off = dragging never moves anything', options: [{ id: 'off', name: 'Off' }, { id: 'rotate', name: 'Rotates car' }, { id: 'move', name: 'Moves car' }], get: () => state.dragMode, set: v => { state.dragMode = v; } , label: 'Drag' });
 

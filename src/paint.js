@@ -88,13 +88,20 @@ export function makePaint(p, template) {
   return m;
 }
 
-export function plateTexture(text = 'HALIDE') {
-  const c = document.createElement('canvas'); c.width = 1024; c.height = 256;
-  const g = c.getContext('2d');
-  g.fillStyle = '#e9e7df'; g.fillRect(0, 0, 1024, 256);
-  g.strokeStyle = '#1a1a1a'; g.lineWidth = 10; g.strokeRect(12, 12, 1000, 232);
-  g.fillStyle = '#161616'; g.font = 'bold 150px "Helvetica Neue", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 512, 136);
+export function drawPlate(g, text) {
+  const c = g.canvas, k = c.height / 256;
+  g.fillStyle = '#e9e7df'; g.fillRect(0, 0, c.width, c.height);
+  g.strokeStyle = '#1a1a1a'; g.lineWidth = 10 * k; g.strokeRect(12 * k, 12 * k, c.width - 24 * k, c.height - 24 * k);
+  g.fillStyle = '#161616'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let size = Math.round(150 * k); g.font = `bold ${size}px "Helvetica Neue", Arial, sans-serif`;
+  const maxW = c.width - 140 * k, w = g.measureText(text).width;
+  if (w > maxW) { size = Math.max(24, Math.floor(size * maxW / w)); g.font = `bold ${size}px "Helvetica Neue", Arial, sans-serif`; }
+  g.fillText(text, c.width / 2, c.height / 2 + 8 * k);
+}
+
+export function plateTexture(text = 'HALIDE', aspect = 4) {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = Math.round(1024 / aspect);
+  drawPlate(c.getContext('2d'), (text || 'HALIDE').toUpperCase());
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
 }
